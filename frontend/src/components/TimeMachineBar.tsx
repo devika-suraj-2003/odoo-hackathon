@@ -4,28 +4,35 @@ import { Clock, FastForward, RotateCcw, LoaderCircle } from "lucide-react";
 import api from "../api/client";
 import { errorMessage } from "../api/errors";
 
-type Clock = { today: string; simulated?: boolean };
-
 const STEPS = [
   { days: 1, label: "+1 day" },
   { days: 7, label: "+1 week" },
   { days: 30, label: "+1 month" },
 ];
 
+function pickToday(d: any): { today: string; simulated: boolean } | null {
+  if (!d || typeof d !== "object") return null;
+  const src = d.settings && typeof d.settings === "object" ? { ...d, ...d.settings } : d;
+  const today = src.simulated_today || src.today || src.current_date || src.real_today;
+  if (!today) return { today: new Date().toISOString().slice(0, 10), simulated: false };
+  return { today, simulated: !!src.simulated_today && src.simulated_today !== src.real_today };
+}
+
 function nice(d: string) {
   return new Date(d).toLocaleDateString("en-IN", { weekday: "short", day: "2-digit", month: "short", year: "numeric" });
 }
 
 export default function TimeMachineBar({ onChanged }: { onChanged: () => void }) {
-  const [clock, setClock] = useState<Clock | null>(null);
+  const [clock, setClock] = useState<{ today: string; simulated: boolean } | null>(null);
   const [available, setAvailable] = useState(true);
   const [busy, setBusy] = useState<number | "reset" | null>(null);
 
   useEffect(() => {
     api
-      .get("/settings/clock")
+      .get("/settings")
       .then(({ data }) => {
-        if (data && data.today) setClock(data);
+        const c = pickToday(data);
+        if (c) setClock(c);
         else setAvailable(false);
       })
       .catch(() => setAvailable(false));
@@ -34,10 +41,10 @@ export default function TimeMachineBar({ onChanged }: { onChanged: () => void })
   async function advance(days: number) {
     setBusy(days);
     try {
-      const { data } = await api.post("/settings/clock/advance", { days });
-      setClock({ today: data.today, simulated: true });
-      const n = data.invoices_created ?? 0;
-      toast.success(`Jumped to ${nice(data.today)} · ${n} invoice${n === 1 ? "" : "s"} created`, { duration: 4000 });
+      const { data } = await api.post("/settings/time-travel", { days });
+      setClock({ today: data.simulated_today, simulated: true });
+      const n = data.invoices_created;
+      toast.success(`Jumped to ${nice(data.simulated_today)}${typeof n === "number" ? ` · ${n} invoice${n === 1 ? "" : "s"} created` : ""}`, { duration: 4000 });
       onChanged();
     } catch (err) {
       toast.error(errorMessage(err, "Could not move time"));
@@ -49,8 +56,8 @@ export default function TimeMachineBar({ onChanged }: { onChanged: () => void })
   async function reset() {
     setBusy("reset");
     try {
-      const { data } = await api.post("/settings/clock/reset");
-      setClock({ today: data.today, simulated: false });
+      const { data } = await api.post("/settings/time-travel/reset");
+      setClock({ today: data.simulated_today || data.real_today, simulated: false });
       toast.success("Back to the real date");
       onChanged();
     } catch (err) {
@@ -90,12 +97,7 @@ export default function TimeMachineBar({ onChanged }: { onChanged: () => void })
             {s.label}
           </button>
         ))}
-        <button
-          onClick={reset}
-          disabled={busy !== null}
-          title="Back to real date"
-          className="rounded-lg p-1.5 text-slate-400 transition hover:bg-white hover:text-slate-700 disabled:opacity-60"
-        >
+        <button onClick={reset} disabled={busy !== null} title="Back to real date" className="rounded-lg p-1.5 text-slate-400 transition hover:bg-white hover:text-slate-700 disabled:opacity-60">
           {busy === "reset" ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
         </button>
       </div>
