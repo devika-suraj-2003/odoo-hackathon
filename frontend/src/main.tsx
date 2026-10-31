@@ -6,6 +6,10 @@ import { AuthProvider } from "./context/AuthContext";
 import App from "./App";
 import "./index.css";
 
+try {
+  if (localStorage.getItem("theme") === "dark") document.documentElement.classList.add("dark");
+} catch {}
+
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <BrowserRouter>

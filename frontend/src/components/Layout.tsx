@@ -2,7 +2,7 @@ import { useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, Users, Repeat, FileText, CreditCard, Package, CalendarClock,
-  FileStack, Percent, BadgePercent, UserCog, UserRound, LogOut, Search,
+  FileStack, Percent, BadgePercent, UserCog, UserRound, LogOut, Search, Moon, Sun,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useAuth, type Role } from "../context/AuthContext";
@@ -39,6 +39,7 @@ export default function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
   const [refreshKey, setRefreshKey] = useState(0);
+  const [dark, setDark] = useState(() => document.documentElement.classList.contains("dark"));
   if (!user) return null;
 
   const menu = items.filter((i) => i.roles.includes(user.role));
@@ -53,6 +54,15 @@ export default function Layout() {
   function handleLogout() {
     logout();
     navigate("/login", { replace: true });
+  }
+
+  function toggleDark() {
+    const next = !dark;
+    setDark(next);
+    document.documentElement.classList.toggle("dark", next);
+    try {
+      localStorage.setItem("theme", next ? "dark" : "light");
+    } catch {}
   }
 
   return (
@@ -102,6 +112,13 @@ export default function Layout() {
               <Search className="h-4 w-4" />
               <span className="w-40 text-left">Search...</span>
               <kbd className="rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-xs">Ctrl K</kbd>
+            </button>
+            <button
+              onClick={toggleDark}
+              title={dark ? "Light mode" : "Dark mode"}
+              className="grid h-9 w-9 place-items-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:text-slate-800"
+            >
+              {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </button>
             <span className={`rounded-full px-2.5 py-1 text-xs font-semibold capitalize ${roleBadge[user.role]}`}>{user.role}</span>
             <div className="text-right">

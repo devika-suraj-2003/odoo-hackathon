@@ -1,9 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import toast from "react-hot-toast";
-import {
-  ArrowLeft, Send, CircleCheck, Play, Pause, RotateCcw, CircleX, LoaderCircle, Check, History, FileText,
-} from "lucide-react";
+import { ArrowLeft, Send, CircleCheck, Play, Pause, RotateCcw, CircleX, LoaderCircle, Check, History, FileText } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import api from "../api/client";
 import { errorMessage } from "../api/errors";
@@ -21,26 +19,30 @@ type Sub = {
   start_date?: string | null;
   expiry_date?: string | null;
   next_billing_date?: string | null;
-  payment_terms?: string | null;
+  payment_terms?: number | string | null;
   lines?: Line[];
   subtotal?: number;
   tax_total?: number;
   total?: number;
   history?: HistoryItem[];
 };
-type Invoice = { id: number; number: string; status: string; invoice_date?: string; total: number; amount_due?: number };
-
+type Invoice = { id: number; number: string; status: string; invoice_date?: string; total: number; amount_due?: number; subscription_id?: number };
 type Action = { key: string; label: string; icon: LucideIcon; style: "primary" | "secondary" | "danger" };
 
 const STEPS = ["draft", "quotation", "confirmed", "active", "closed"];
 
 const ACTIONS: Record<string, Action[]> = {
-  draft: [{ key: "send-quotation", label: "Send quotation", icon: Send, style: "primary" }],
-  quotation: [{ key: "confirm", label: "Confirm", icon: CircleCheck, style: "primary" }],
+  draft: [
+    { key: "send-quotation", label: "Send quotation", icon: Send, style: "primary" },
+    { key: "close", label: "Close", icon: CircleX, style: "danger" },
+  ],
+  quotation: [
+    { key: "confirm", label: "Confirm", icon: CircleCheck, style: "primary" },
+    { key: "close", label: "Close", icon: CircleX, style: "danger" },
+  ],
   confirmed: [{ key: "activate", label: "Activate", icon: Play, style: "primary" }],
   active: [
     { key: "pause", label: "Pause", icon: Pause, style: "secondary" },
-    { key: "renew", label: "Renew", icon: RotateCcw, style: "secondary" },
     { key: "close", label: "Close", icon: CircleX, style: "danger" },
   ],
   paused: [
@@ -66,6 +68,13 @@ function formatDateTime(d?: string | null) {
   return new Date(d).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
 }
 
+function formatTerms(t?: number | string | null) {
+  if (t === null || t === undefined || t === "") return "—";
+  const n = Number(t);
+  if (Number.isNaN(n)) return String(t).replace(/_/g, " ");
+  return n === 0 ? "Immediate" : `${n} days`;
+}
+
 export default function SubscriptionDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -78,15 +87,16 @@ export default function SubscriptionDetail() {
     setLoading(true);
     try {
       const { data } = await api.get(`/subscriptions/${id}`);
-      setSub(data);
+      setSub(data && data.id ? data : null);
     } catch (err) {
       toast.error(errorMessage(err, "Could not load subscription"), { id: "sub-load" });
     } finally {
       setLoading(false);
     }
     try {
-      const { data } = await api.get("/invoices", { params: { subscription_id: id } });
-      setInvoices(Array.isArray(data) ? data : []);
+      const { data } = await api.get("/invoices/", { params: { subscription_id: id } });
+      const all: Invoice[] = Array.isArray(data) ? data : [];
+      setInvoices(all.filter((inv) => inv.subscription_id === undefined || String(inv.subscription_id) === String(id)));
     } catch {
       setInvoices([]);
     }
@@ -182,18 +192,12 @@ export default function SubscriptionDetail() {
                 <div className="flex flex-col items-center gap-2">
                   <div
                     className={`grid h-9 w-9 place-items-center rounded-full text-sm font-bold transition ${
-                      done
-                        ? "bg-indigo-600 text-white"
-                        : current
-                        ? "bg-indigo-50 text-indigo-700 ring-2 ring-indigo-600"
-                        : "bg-slate-100 text-slate-400"
+                      done ? "bg-indigo-600 text-white" : current ? "bg-indigo-50 text-indigo-700 ring-2 ring-indigo-600" : "bg-slate-100 text-slate-400"
                     }`}
                   >
                     {done ? <Check className="h-4 w-4" /> : i + 1}
                   </div>
-                  <span className={`text-xs font-semibold capitalize ${done || current ? "text-slate-800" : "text-slate-400"}`}>
-                    {s === "active" && status === "paused" ? "paused" : s}
-                  </span>
+                  <span className={`text-xs font-semibold capitalize ${done || current ? "text-slate-800" : "text-slate-400"}`}>{s === "active" && status === "paused" ? "paused" : s}</span>
                 </div>
                 {i < STEPS.length - 1 && <div className={`mx-2 mb-6 h-0.5 flex-1 rounded ${i < stepIndex ? "bg-indigo-600" : "bg-slate-200"}`} />}
               </div>
@@ -217,7 +221,7 @@ export default function SubscriptionDetail() {
               </div>
               <div>
                 <dt className="text-slate-500">Payment terms</dt>
-                <dd className="font-semibold capitalize text-slate-900">{sub.payment_terms?.replace(/_/g, " ") ?? "—"}</dd>
+                <dd className="font-semibold text-slate-900">{formatTerms(sub.payment_terms)}</dd>
               </div>
               <div>
                 <dt className="text-slate-500">Start date</dt>
@@ -319,9 +323,7 @@ export default function SubscriptionDetail() {
               {history.map((h, i) => (
                 <li key={i} className="relative">
                   <span className={`absolute -left-[31px] top-0.5 h-4 w-4 rounded-full ring-4 ring-white ${i === 0 ? "bg-indigo-600" : "bg-slate-300"}`} />
-                  <p className="text-sm font-semibold capitalize text-slate-900">
-                    {h.from_status ? `${h.from_status} → ${h.to_status}` : `Created as ${h.to_status}`}
-                  </p>
+                  <p className="text-sm font-semibold capitalize text-slate-900">{h.from_status ? `${h.from_status} → ${h.to_status}` : `Created as ${h.to_status}`}</p>
                   {h.note && <p className="mt-0.5 text-xs text-slate-600">{h.note}</p>}
                   <p className="mt-0.5 text-xs text-slate-400">{formatDateTime(h.at)}</p>
                 </li>

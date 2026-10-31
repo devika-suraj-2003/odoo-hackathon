@@ -7,7 +7,16 @@ import { useAuth } from "../context/AuthContext";
 import StatusBadge from "../components/StatusBadge";
 import { formatINR } from "../lib/money";
 
-type Invoice = { id: number; number: string; status: string; invoice_date?: string | null; due_date?: string | null; total: number; amount_due?: number };
+type Invoice = {
+  id: number;
+  number: string;
+  status: string;
+  invoice_date?: string | null;
+  due_date?: string | null;
+  total: number;
+  amount_due?: number;
+  customer?: { id: number; name?: string } | null;
+};
 
 const todayStr = () => new Date().toISOString().slice(0, 10);
 const fmt = (d?: string | null) => (d ? new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—");
@@ -31,8 +40,9 @@ export default function PortalInvoices() {
 
   async function load() {
     try {
-      const { data } = await api.get("/invoices");
-      setItems(Array.isArray(data) ? data.filter((i: Invoice) => i.status !== "draft") : []);
+      const { data } = await api.get("/invoices/");
+      const all: Invoice[] = Array.isArray(data) ? data : [];
+      setItems(all.filter((i) => i.status !== "draft" && (!i.customer || i.customer.id === user?.id)));
     } catch (err) {
       toast.error(errorMessage(err, "Could not load your invoices"), { id: "portal-inv" });
     } finally {

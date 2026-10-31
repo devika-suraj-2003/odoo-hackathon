@@ -1,32 +1,40 @@
-# React + TypeScript + Vite
+# Brightloop Subscriptions – Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+React + Vite + TypeScript + Tailwind v4 dashboard for the Brightloop Subscription Management System.
 
-Currently, two official plugins are available:
+## Run it
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```bash
+cd frontend
+npm install
+npm run dev
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+Open http://localhost:5173 (backend must run on http://localhost:8000).
+
+## Demo logins
+
+| Role | Email | Password |
+|---|---|---|
+| Admin | admin@brightloop.com | Admin@1234 |
+| Staff | staff@brightloop.com | Staff@1234 |
+| Customer | customer@brightloop.com | Customer@1234 |
+
+The **Quick demo** buttons on the login page log in with these.
+
+## Pages
+
+- **Auth:** login, signup (live password rules), forgot / reset password
+- **Admin & staff:** Dashboard, Customers, Subscriptions (list + Kanban), Invoices, Payments
+- **Admin only:** Products (variants), Plans, Quotation templates, Taxes (GST split), Discounts, Staff
+- **Customer portal:** My subscriptions, My invoices (Pay now with Razorpay), Profile
+
+## Highlights
+
+- ⏰ **Time machine**: jump +1 day / week / month to watch billing run
+- 📋 **Kanban board**: move subscriptions Draft → Quotation → Confirmed → Active in one click
+- 🔍 **Ctrl+K** command palette to jump to any page, subscription, invoice or customer
+- 📈 MRR / ARR, revenue chart, **MRR forecast**, **customers at risk**
+- 🧾 Live **GST split preview** (CGST + SGST in Kerala, IGST elsewhere)
+- ⚡ "Loaded in X ms" speed badge, 🌙 dark mode, print-ready invoices
+- 💰 All money handled as integer **paise**, so there are no rounding errors

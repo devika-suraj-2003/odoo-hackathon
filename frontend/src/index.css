@@ -9,6 +9,38 @@ body {
   @apply bg-slate-50 text-slate-900 antialiased;
 }
 
+/* ---------- Dark mode ---------- */
+html.dark body { background-color: #020617; color: #e2e8f0; }
+html.dark .bg-white, html.dark .bg-white\/80 { background-color: #0f172a !important; }
+html.dark .bg-slate-50, html.dark .bg-slate-50\/70, html.dark .bg-slate-100, html.dark .bg-slate-100\/70 { background-color: #1e293b !important; }
+html.dark .text-slate-900, html.dark .text-slate-800 { color: #f1f5f9 !important; }
+html.dark .text-slate-700, html.dark .text-slate-600 { color: #cbd5e1 !important; }
+html.dark .text-slate-500, html.dark .text-slate-400 { color: #94a3b8 !important; }
+html.dark .border-slate-100, html.dark .border-slate-200, html.dark .border-slate-300 { border-color: #334155 !important; }
+html.dark .ring-slate-200, html.dark .ring-slate-300 { --tw-ring-color: #334155 !important; }
+html.dark .divide-slate-100 > * + * { border-color: #1e293b !important; }
+html.dark input, html.dark select, html.dark textarea { background-color: #0b1220 !important; color: #e2e8f0 !important; border-color: #334155 !important; }
+html.dark .hover\:bg-slate-50:hover, html.dark .hover\:bg-slate-50\/70:hover, html.dark .hover\:bg-slate-100:hover { background-color: #1e293b !important; }
+html.dark .bg-indigo-50, html.dark .bg-indigo-50\/60 { background-color: rgb(99 102 241 / 0.15) !important; }
+html.dark .bg-emerald-50 { background-color: rgb(16 185 129 / 0.15) !important; }
+html.dark .bg-amber-50 { background-color: rgb(245 158 11 / 0.15) !important; }
+html.dark .bg-red-50 { background-color: rgb(239 68 68 / 0.15) !important; }
+html.dark .bg-sky-50 { background-color: rgb(14 165 233 / 0.15) !important; }
+html.dark .bg-violet-50, html.dark .bg-violet-100 { background-color: rgb(139 92 246 / 0.18) !important; }
+html.dark .bg-sky-100 { background-color: rgb(14 165 233 / 0.2) !important; }
+html.dark .bg-emerald-100 { background-color: rgb(16 185 129 / 0.2) !important; }
+html.dark .text-indigo-700, html.dark .text-indigo-600 { color: #a5b4fc !important; }
+html.dark .text-indigo-900 { color: #c7d2fe !important; }
+html.dark .text-emerald-700, html.dark .text-emerald-600 { color: #6ee7b7 !important; }
+html.dark .text-amber-700, html.dark .text-amber-800 { color: #fcd34d !important; }
+html.dark .text-red-700, html.dark .text-red-600 { color: #fca5a5 !important; }
+html.dark .text-sky-700 { color: #7dd3fc !important; }
+html.dark .text-violet-700 { color: #c4b5fd !important; }
+html.dark .from-indigo-50 { --tw-gradient-from: #1e1b4b !important; }
+html.dark .to-violet-50 { --tw-gradient-to: #2e1065 !important; }
+html.dark .border-indigo-100, html.dark .border-indigo-300 { border-color: #3730a3 !important; }
+
+/* ---------- Print ---------- */
 @media print {
   aside,
   header,
