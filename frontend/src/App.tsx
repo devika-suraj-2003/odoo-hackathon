@@ -13,6 +13,7 @@ import Subscriptions from "./pages/Subscriptions";
 import SubscriptionDetail from "./pages/SubscriptionDetail";
 import Invoices from "./pages/Invoices";
 import InvoiceDetail from "./pages/InvoiceDetail";
+import Payments from "./pages/Payments";
 
 function Home() {
   const { user } = useAuth();
@@ -37,7 +38,7 @@ export default function App() {
             <Route path="/subscriptions/:id" element={<SubscriptionDetail />} />
             <Route path="/invoices" element={<Invoices />} />
             <Route path="/invoices/:id" element={<InvoiceDetail />} />
-            <Route path="/payments" element={<Placeholder title="Payments" />} />
+            <Route path="/payments" element={<Payments />} />
           </Route>
 
           <Route element={<ProtectedRoute roles={["admin"]} />}>
