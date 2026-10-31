@@ -25,6 +25,11 @@ from app.schemas.plan import (
     PlanUpdate,
     PlanResponse,
 )
+from app.schemas.settings import (
+    TimeTravelRequest,
+    TimeTravelResponse,
+    TimeTravelResetResponse,
+)
 
 __all__ = [
     "UserSignup",
@@ -42,4 +47,7 @@ __all__ = [
     "PlanCreate",
     "PlanUpdate",
     "PlanResponse",
+    "TimeTravelRequest",
+    "TimeTravelResponse",
+    "TimeTravelResetResponse",
 ]
