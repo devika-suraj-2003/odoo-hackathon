@@ -59,7 +59,7 @@ export default function People({ role }: { role: "customer" | "staff" }) {
         state: isCustomer ? form.state : null,
         password: form.password,
       };
-      const { data } = isCustomer ? await api.post("/users", { ...payload, role }) : await api.post("/users/staff", payload);
+      const { data } = isCustomer ? await api.post("/users", payload) : await api.post("/users/staff", payload);
       toast.success(`${isCustomer ? "Customer" : "Staff member"} added`);
       setOpen(false);
       if (data && data.id) {

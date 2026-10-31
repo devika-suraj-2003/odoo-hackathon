@@ -119,7 +119,7 @@ export default function Discounts() {
       usage_limit: form.usage_limit ? parseInt(form.usage_limit) : null,
       applies_to: form.applies_to,
       product_ids: form.applies_to === "products" ? form.product_ids : [],
-      active: form.active,
+      is_active: form.active,
     };
     setSaving(true);
     try {
