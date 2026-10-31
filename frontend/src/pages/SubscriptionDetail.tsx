@@ -112,7 +112,7 @@ export default function SubscriptionDetail() {
     try {
       const { data } = await api.post(`/subscriptions/${id}/${a.key}`);
       if (data && data.id) setSub(data);
-      if (!data?.id || a.key === "activate" || a.key === "renew") await load();
+      else await load();
       toast.success(`${a.label} done`);
     } catch (err) {
       toast.error(errorMessage(err, `${a.label} failed`));

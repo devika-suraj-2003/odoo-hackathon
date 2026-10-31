@@ -21,7 +21,6 @@ import People from "./pages/People";
 import Taxes from "./pages/Taxes";
 import Discounts from "./pages/Discounts";
 import Templates from "./pages/Templates";
-import Reports from "./pages/Reports";
 
 function Home() {
   const { user } = useAuth();
@@ -41,7 +40,6 @@ export default function App() {
         <Route element={<Layout />}>
           <Route element={<ProtectedRoute roles={["admin", "staff"]} />}>
             <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/reports" element={<Reports />} />
             <Route path="/customers" element={<People role="customer" />} />
             <Route path="/subscriptions" element={<Subscriptions />} />
             <Route path="/subscriptions/:id" element={<SubscriptionDetail />} />

@@ -72,8 +72,8 @@ export default function InvoiceDetail() {
     try {
       const { data } = await api.get("/payments", { params: { invoice_id: id } });
       setPayments(Array.isArray(data) ? data : []);
-    } catch (err) {
-      toast.error(errorMessage(err, "Could not load payment history"), { id: "inv-payments" });
+    } catch {
+      setPayments([]);
     }
   }
 

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, Users, Repeat, FileText, CreditCard, Package, CalendarClock,
-  FileStack, Percent, BadgePercent, UserCog, UserRound, LogOut, Search,
+  FileStack, Percent, BadgePercent, UserCog, UserRound, LogOut, Search, Moon, Sun,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useAuth, type Role } from "../context/AuthContext";
@@ -13,7 +13,6 @@ type Item = { to: string; label: string; icon: LucideIcon; roles: Role[] };
 
 const items: Item[] = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard, roles: ["admin", "staff"] },
-  { to: "/reports", label: "Reports", icon: BarChart3, roles: ["admin", "staff"] },
   { to: "/customers", label: "Customers", icon: Users, roles: ["admin", "staff"] },
   { to: "/subscriptions", label: "Subscriptions", icon: Repeat, roles: ["admin", "staff"] },
   { to: "/invoices", label: "Invoices", icon: FileText, roles: ["admin", "staff"] },

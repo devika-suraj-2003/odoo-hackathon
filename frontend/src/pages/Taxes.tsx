@@ -7,31 +7,9 @@ import Modal from "../components/Modal";
 import { inputCls, labelCls, btnPrimary, btnSecondary } from "../components/ui";
 import { formatINR } from "../lib/money";
 
-type Tax = {
-  id: number;
-  name: string;
-  rate: number;
-  tax_type: "gst" | "vat" | "sales_tax" | "exempt" | "other";
-  is_active: boolean;
-  description?: string | null;
-};
-type TaxCalculation = {
-  tax_amount_paise: number;
-  total_paise: number;
-  gst_breakdown: {
-    is_intra_state: boolean;
-    company_state: string;
-    customer_state: string;
-    cgst_rate: number;
-    cgst_amount_paise: number;
-    sgst_rate: number;
-    sgst_amount_paise: number;
-    igst_rate: number;
-    igst_amount_paise: number;
-  } | null;
-};
+type Tax = { id: number; name: string; rate: number; is_default?: boolean; active?: boolean; description?: string | null };
 
-const EMPTY = { name: "", rate: "18", tax_type: "gst" as Tax["tax_type"], description: "", is_active: true };
+const EMPTY = { name: "", rate: "18", description: "", is_default: false, active: true };
 
 export default function Taxes() {
   const [items, setItems] = useState<Tax[]>([]);
@@ -41,10 +19,6 @@ export default function Taxes() {
   const [form, setForm] = useState(EMPTY);
   const [saving, setSaving] = useState(false);
   const [preview, setPreview] = useState({ amount: "1000", rate: "18" });
-  const [previewState, setPreviewState] = useState("Kerala");
-  const [calculation, setCalculation] = useState<TaxCalculation | null>(null);
-  const [previewLoading, setPreviewLoading] = useState(false);
-  const [previewError, setPreviewError] = useState("");
 
   async function load() {
     setLoading(true);
@@ -62,45 +36,6 @@ export default function Taxes() {
     load();
   }, []);
 
-  useEffect(() => {
-    const amount = Number(preview.amount);
-    const rate = Number(preview.rate);
-    if (!Number.isFinite(amount) || amount < 0 || !Number.isFinite(rate) || rate < 0 || rate > 100) {
-      setCalculation(null);
-      setPreviewLoading(false);
-      setPreviewError("Enter a non-negative amount and a tax rate between 0 and 100.");
-      return;
-    }
-
-    let cancelled = false;
-    const timer = window.setTimeout(() => {
-      setPreviewLoading(true);
-      setPreviewError("");
-      api
-        .post("/taxes/calculate", {
-          subtotal_paise: Math.round(amount * 100),
-          tax_rate: rate,
-          customer_state: previewState,
-        })
-        .then(({ data }) => {
-          if (!cancelled) setCalculation(data);
-        })
-        .catch((err) => {
-          if (!cancelled) {
-            setCalculation(null);
-            setPreviewError(errorMessage(err, "Could not calculate GST."));
-          }
-        })
-        .finally(() => {
-          if (!cancelled) setPreviewLoading(false);
-        });
-    }, 250);
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timer);
-    };
-  }, [preview.amount, preview.rate, previewState]);
-
   function openNew() {
     setEditing(null);
     setForm(EMPTY);
@@ -109,7 +44,7 @@ export default function Taxes() {
 
   function openEdit(t: Tax) {
     setEditing(t);
-    setForm({ name: t.name, rate: String(t.rate), tax_type: t.tax_type, description: t.description ?? "", is_active: t.is_active });
+    setForm({ name: t.name, rate: String(t.rate), description: t.description ?? "", is_default: !!t.is_default, active: t.active !== false });
     setOpen(true);
   }
 
@@ -117,13 +52,7 @@ export default function Taxes() {
     e.preventDefault();
     const rate = parseFloat(form.rate);
     if (!Number.isFinite(rate) || rate < 0 || rate > 100) return toast.error("Rate must be between 0 and 100");
-    const body = {
-      name: form.name.trim(),
-      rate,
-      tax_type: form.tax_type,
-      description: form.description.trim() || null,
-      is_active: form.is_active,
-    };
+    const body = { name: form.name.trim(), rate, description: form.description.trim() || null, is_default: form.is_default, active: form.active };
     setSaving(true);
     try {
       if (editing) await api.put(`/taxes/${editing.id}`, body);
@@ -143,18 +72,23 @@ export default function Taxes() {
     try {
       await api.delete(`/taxes/${t.id}`);
       toast.success("Tax deleted");
-      setItems((list) => list.map((x) => (x.id === t.id ? { ...x, is_active: false } : x)));
+      setItems((list) => list.filter((x) => x.id !== t.id));
     } catch (err) {
       toast.error(errorMessage(err, "Could not delete tax"));
     }
   }
+
+  const base = Math.round((parseFloat(preview.amount) || 0) * 100);
+  const pRate = parseFloat(preview.rate) || 0;
+  const taxTotal = Math.round((base * pRate) / 100);
+  const half = Math.round(taxTotal / 2);
 
   return (
     <div className="space-y-6">
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-2">
           <div className="flex items-center justify-between">
-            <p className="text-sm text-slate-500">Manage tax rules and preview server-calculated GST.</p>
+            <p className="text-sm text-slate-500">Taxes are applied automatically to every invoice line.</p>
             <button onClick={openNew} className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700">
               <Plus className="h-4 w-4" /> New tax
             </button>
@@ -186,7 +120,8 @@ export default function Taxes() {
                     <td className="px-5 py-4">
                       <div className="flex items-center gap-2">
                         <p className="font-semibold text-slate-900">{t.name}</p>
-                        {!t.is_active && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-500">Inactive</span>}
+                        {t.is_default && <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-semibold text-indigo-700">Default</span>}
+                        {t.active === false && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-500">Inactive</span>}
                       </div>
                       {t.description && <p className="text-xs text-slate-500">{t.description}</p>}
                     </td>
@@ -200,11 +135,9 @@ export default function Taxes() {
                         <button onClick={() => openEdit(t)} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-indigo-600">
                           <Pencil className="h-4 w-4" />
                         </button>
-                        {t.is_active && (
-                          <button onClick={() => handleDelete(t)} className="rounded-lg p-2 text-slate-400 hover:bg-red-50 hover:text-red-600">
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        )}
+                        <button onClick={() => handleDelete(t)} className="rounded-lg p-2 text-slate-400 hover:bg-red-50 hover:text-red-600">
+                          <Trash2 className="h-4 w-4" />
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -216,7 +149,7 @@ export default function Taxes() {
 
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <h3 className="font-bold text-slate-900">GST split preview</h3>
-          <p className="mt-1 text-xs text-slate-500">GST jurisdiction follows the configured company state.</p>
+          <p className="mt-1 text-xs text-slate-500">Brightloop is registered in Kerala.</p>
           <div className="mt-4 grid grid-cols-2 gap-3">
             <div>
               <label className={labelCls}>Amount (₹)</label>
@@ -226,37 +159,23 @@ export default function Taxes() {
               <label className={labelCls}>GST %</label>
               <input type="number" value={preview.rate} onChange={(e) => setPreview({ ...preview, rate: e.target.value })} className={inputCls} />
             </div>
-            <div className="col-span-2">
-              <label className={labelCls}>Customer state</label>
-              <select value={previewState} onChange={(e) => setPreviewState(e.target.value)} className={inputCls}>
-                <option value="Kerala">Kerala</option>
-                <option value="Maharashtra">Maharashtra</option>
-              </select>
-            </div>
           </div>
           <div className="mt-5 space-y-3">
-            {previewError && <p role="alert" className="text-sm text-red-600">{previewError}</p>}
-            {previewLoading && <p className="text-sm text-slate-500">Calculating GST…</p>}
-            {calculation?.gst_breakdown && (
-              <div className={`rounded-xl p-4 ${calculation.gst_breakdown.is_intra_state ? "bg-emerald-50" : "bg-sky-50"}`}>
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-700">
-                  {calculation.gst_breakdown.is_intra_state ? "CGST + SGST" : "IGST"} · Company: {calculation.gst_breakdown.company_state}
-                </p>
-                <div className="mt-2 space-y-1 text-sm text-slate-700">
-                  {calculation.gst_breakdown.is_intra_state ? (
-                    <>
-                      <div className="flex justify-between"><span>CGST {calculation.gst_breakdown.cgst_rate}%</span><span>{formatINR(calculation.gst_breakdown.cgst_amount_paise)}</span></div>
-                      <div className="flex justify-between"><span>SGST {calculation.gst_breakdown.sgst_rate}%</span><span>{formatINR(calculation.gst_breakdown.sgst_amount_paise)}</span></div>
-                    </>
-                  ) : (
-                    <div className="flex justify-between"><span>IGST {calculation.gst_breakdown.igst_rate}%</span><span>{formatINR(calculation.gst_breakdown.igst_amount_paise)}</span></div>
-                  )}
-                  <div className="flex justify-between border-t border-slate-200 pt-1 font-bold text-slate-900">
-                    <span>Total including tax</span><span>{formatINR(calculation.total_paise)}</span>
-                  </div>
-                </div>
+            <div className="rounded-xl bg-emerald-50 p-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Customer in Kerala</p>
+              <div className="mt-2 space-y-1 text-sm text-slate-700">
+                <div className="flex justify-between"><span>CGST {pRate / 2}%</span><span>{formatINR(half)}</span></div>
+                <div className="flex justify-between"><span>SGST {pRate / 2}%</span><span>{formatINR(taxTotal - half)}</span></div>
+                <div className="flex justify-between border-t border-emerald-200 pt-1 font-bold text-slate-900"><span>Total</span><span>{formatINR(base + taxTotal)}</span></div>
               </div>
-            )}
+            </div>
+            <div className="rounded-xl bg-sky-50 p-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-sky-700">Customer in another state</p>
+              <div className="mt-2 space-y-1 text-sm text-slate-700">
+                <div className="flex justify-between"><span>IGST {pRate}%</span><span>{formatINR(taxTotal)}</span></div>
+                <div className="flex justify-between border-t border-sky-200 pt-1 font-bold text-slate-900"><span>Total</span><span>{formatINR(base + taxTotal)}</span></div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -274,22 +193,16 @@ export default function Taxes() {
             </div>
           </div>
           <div>
-            <label className={labelCls}>Tax type</label>
-            <select value={form.tax_type} onChange={(e) => setForm({ ...form, tax_type: e.target.value as Tax["tax_type"] })} className={inputCls}>
-              <option value="gst">GST</option>
-              <option value="vat">VAT</option>
-              <option value="sales_tax">Sales tax</option>
-              <option value="exempt">Exempt</option>
-              <option value="other">Other</option>
-            </select>
-          </div>
-          <div>
             <label className={labelCls}>Description</label>
             <input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Optional" className={inputCls} />
           </div>
           <div className="flex gap-6">
             <label className="flex items-center gap-2 text-sm text-slate-700">
-              <input type="checkbox" checked={form.is_active} onChange={(e) => setForm({ ...form, is_active: e.target.checked })} className="h-4 w-4 accent-indigo-600" />
+              <input type="checkbox" checked={form.is_default} onChange={(e) => setForm({ ...form, is_default: e.target.checked })} className="h-4 w-4 accent-indigo-600" />
+              Default tax for new lines
+            </label>
+            <label className="flex items-center gap-2 text-sm text-slate-700">
+              <input type="checkbox" checked={form.active} onChange={(e) => setForm({ ...form, active: e.target.checked })} className="h-4 w-4 accent-indigo-600" />
               Active
             </label>
           </div>
