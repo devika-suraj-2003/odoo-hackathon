@@ -9,6 +9,16 @@ import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
 import Products from "./pages/Products";
 import Plans from "./pages/Plans";
+import Subscriptions from "./pages/Subscriptions";
+import SubscriptionDetail from "./pages/SubscriptionDetail";
+import Invoices from "./pages/Invoices";
+import InvoiceDetail from "./pages/InvoiceDetail";
+import Payments from "./pages/Payments";
+import PortalSubscriptions from "./pages/PortalSubscriptions";
+import PortalInvoices from "./pages/PortalInvoices";
+import PortalProfile from "./pages/PortalProfile";
+import Dashboard from "./pages/Dashboard";
+import People from "./pages/People";
 
 function Home() {
   const { user } = useAuth();
@@ -27,11 +37,13 @@ export default function App() {
       <Route element={<ProtectedRoute />}>
         <Route element={<Layout />}>
           <Route element={<ProtectedRoute roles={["admin", "staff"]} />}>
-            <Route path="/dashboard" element={<Placeholder title="Dashboard" />} />
-            <Route path="/customers" element={<Placeholder title="Customers" />} />
-            <Route path="/subscriptions" element={<Placeholder title="Subscriptions" />} />
-            <Route path="/invoices" element={<Placeholder title="Invoices" />} />
-            <Route path="/payments" element={<Placeholder title="Payments" />} />
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/customers" element={<People role="customer" />} />
+            <Route path="/subscriptions" element={<Subscriptions />} />
+            <Route path="/subscriptions/:id" element={<SubscriptionDetail />} />
+            <Route path="/invoices" element={<Invoices />} />
+            <Route path="/invoices/:id" element={<InvoiceDetail />} />
+            <Route path="/payments" element={<Payments />} />
           </Route>
 
           <Route element={<ProtectedRoute roles={["admin"]} />}>
@@ -40,13 +52,13 @@ export default function App() {
             <Route path="/templates" element={<Placeholder title="Quotation templates" />} />
             <Route path="/taxes" element={<Placeholder title="Taxes" />} />
             <Route path="/discounts" element={<Placeholder title="Discounts" />} />
-            <Route path="/staff" element={<Placeholder title="Staff" />} />
+            <Route path="/staff" element={<People role="staff" />} />
           </Route>
 
           <Route element={<ProtectedRoute roles={["customer"]} />}>
-            <Route path="/portal/subscriptions" element={<Placeholder title="My subscriptions" />} />
-            <Route path="/portal/invoices" element={<Placeholder title="My invoices" />} />
-            <Route path="/portal/profile" element={<Placeholder title="Profile" />} />
+            <Route path="/portal/subscriptions" element={<PortalSubscriptions />} />
+            <Route path="/portal/invoices" element={<PortalInvoices />} />
+            <Route path="/portal/profile" element={<PortalProfile />} />
           </Route>
         </Route>
       </Route>
