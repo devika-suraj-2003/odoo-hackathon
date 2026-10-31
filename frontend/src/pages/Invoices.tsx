@@ -7,6 +7,7 @@ import api from "../api/client";
 import { errorMessage } from "../api/errors";
 import StatusBadge from "../components/StatusBadge";
 import { formatINR } from "../lib/money";
+import AnimatedValue from "../components/AnimatedValue";
 
 type Invoice = {
   id: number;
@@ -41,14 +42,14 @@ function formatDate(d?: string | null) {
 
 function Stat({ label, value, icon: Icon, tone }: { label: string; value: string; icon: LucideIcon; tone: string }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="bl-stat rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex items-center justify-between">
         <p className="text-sm font-medium text-slate-500">{label}</p>
         <div className={`grid h-9 w-9 place-items-center rounded-xl ${tone}`}>
           <Icon className="h-4 w-4" />
         </div>
       </div>
-      <p className="mt-3 text-2xl font-bold text-slate-900">{value}</p>
+      <p className="mt-3 text-2xl font-extrabold tracking-tight text-slate-900"><AnimatedValue value={value} /></p>
     </div>
   );
 }

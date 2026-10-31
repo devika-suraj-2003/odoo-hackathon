@@ -9,6 +9,7 @@ import StatusBadge from "../components/StatusBadge";
 import Modal from "../components/Modal";
 import { inputCls, labelCls, btnPrimary, btnSecondary } from "../components/ui";
 import { formatINR, toPaise, toRupees } from "../lib/money";
+import BrandMark from "../components/BrandMark";
 
 type Line = { description: string; quantity: number; unit_price: number; tax_amount?: number; amount: number };
 type Invoice = {
@@ -206,7 +207,7 @@ export default function InvoiceDetail() {
         <div className="flex flex-wrap items-start justify-between gap-6">
           <div>
             <div className="flex items-center gap-3">
-              <div className="grid h-10 w-10 place-items-center rounded-xl bg-linear-to-br from-indigo-500 to-violet-500 font-extrabold text-white">B</div>
+              <BrandMark />
               <div>
                 <p className="font-bold text-slate-900">Brightloop Software</p>
                 <p className="text-xs text-slate-500">Thiruvananthapuram, Kerala</p>

@@ -7,6 +7,8 @@ import api from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import StatusBadge from "../components/StatusBadge";
 import { formatINR } from "../lib/money";
+import AnimatedValue from "../components/AnimatedValue";
+import { motion } from "framer-motion";
 
 type Sub = { id: number; number: string; status: string; total?: number; customer?: { id?: number; name: string } | null; plan?: { name: string; billing_period: string } | null; next_billing_date?: string | null };
 type Invoice = { id: number; number: string; status: string; due_date?: string | null; total: number; amount_due?: number; customer?: { id?: number; name: string } | null };
@@ -16,22 +18,28 @@ type Summary = Partial<{ active_subscriptions: number; mrr: number; arr: number;
 const todayStr = () => new Date().toISOString().slice(0, 10);
 const arr = (r: PromiseSettledResult<any>) => (r.status === "fulfilled" && Array.isArray(r.value.data) ? r.value.data : []);
 const MONTHLY: Record<string, number> = { daily: 30, weekly: 4.33, monthly: 1, yearly: 1 / 12 };
-const STATUS_COLORS: Record<string, string> = { draft: "#94a3b8", quotation: "#f59e0b", confirmed: "#0ea5e9", active: "#10b981", paused: "#8b5cf6", closed: "#cbd5e1" };
+const STATUS_COLORS: Record<string, string> = { draft: "#94a3b8", quotation: "#f59e0b", confirmed: "#0d9488", active: "#16a34a", paused: "#475569", closed: "#cbd5e1" };
 const rupeeTick = (v: number) => `₹${v >= 1000 ? `${Math.round(v / 1000)}k` : v}`;
 const monthlyOf = (s: Sub) => (s.total ?? 0) * (MONTHLY[s.plan?.billing_period ?? "monthly"] ?? 1);
 
 function Card({ label, value, sub, icon: Icon, tone }: { label: string; value: string; sub?: string; icon: LucideIcon; tone: string }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="flex items-center justify-between">
+    <motion.div
+      variants={{ hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0 } }}
+      whileHover={{ y: -4 }}
+      transition={{ type: "spring", stiffness: 320, damping: 26 }}
+      className="bl-stat group relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+    >
+      <div className="bl-tone-blob pointer-events-none absolute -right-10 -top-10 h-28 w-28 rounded-full blur-2xl transition-transform duration-500 group-hover:scale-150" />
+      <div className="relative flex items-center justify-between">
         <p className="text-sm font-medium text-slate-500">{label}</p>
-        <div className={`grid h-9 w-9 place-items-center rounded-xl ${tone}`}>
+        <div className={`grid h-10 w-10 place-items-center rounded-xl ${tone} transition-transform duration-300 group-hover:rotate-6 group-hover:scale-110`}>
           <Icon className="h-4 w-4" />
         </div>
       </div>
-      <p className="mt-3 text-2xl font-bold text-slate-900">{value}</p>
-      {sub && <p className="mt-1 text-xs text-slate-500">{sub}</p>}
-    </div>
+      <p className="relative mt-3 text-2xl font-extrabold tracking-tight text-slate-900"><AnimatedValue value={value} /></p>
+      {sub && <p className="relative mt-1 text-xs text-slate-500">{sub}</p>}
+    </motion.div>
   );
 }
 
@@ -122,26 +130,38 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h2 className="text-2xl font-bold text-slate-900">Welcome back, {user?.name?.split(" ")[0]} 👋</h2>
-          <p className="text-sm text-slate-500">Here's how Brightloop is doing today.</p>
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+        className="bl-hero relative overflow-hidden rounded-3xl p-6 text-white sm:p-8"
+      >
+        <div className="bl-glow-a pointer-events-none absolute -left-20 -top-24 h-72 w-72 rounded-full blur-3xl" />
+        <div className="bl-glow-c pointer-events-none absolute -bottom-28 right-0 h-72 w-96 rounded-full blur-3xl" />
+        <div className="relative flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/70">{new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" })}</p>
+            <h2 className="mt-2 text-2xl font-extrabold tracking-tight sm:text-3xl">
+              Welcome back, <span className="bg-linear-to-r from-white via-white/90 to-amber-100 bg-clip-text text-transparent">{user?.name?.split(" ")[0]}</span> 👋
+            </h2>
+            <p className="mt-1 text-sm text-white/80">Here's how Brightloop is doing today.</p>
+          </div>
+          {ms !== null && (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-300/30 bg-emerald-400/15 px-3 py-1 text-xs font-semibold text-emerald-200 backdrop-blur">
+              <Zap className="h-3.5 w-3.5" /> Loaded in {ms} ms
+            </span>
+          )}
         </div>
-        {ms !== null && (
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-200">
-            <Zap className="h-3.5 w-3.5" /> Loaded in {ms} ms
-          </span>
-        )}
-      </div>
+      </motion.div>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      <motion.div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3" initial="hidden" animate="show" variants={{ show: { transition: { staggerChildren: 0.07 } } }}>
         <Card label="Monthly recurring revenue" value={formatINR(mrr)} sub="MRR from active subscriptions" icon={TrendingUp} tone="bg-indigo-50 text-indigo-600" />
         <Card label="Annual recurring revenue" value={formatINR(arrValue)} sub="ARR = MRR × 12" icon={IndianRupee} tone="bg-violet-50 text-violet-600" />
         <Card label="Active subscriptions" value={String(summary.active_subscriptions ?? active.length)} sub={`${subs.length} total`} icon={Repeat} tone="bg-sky-50 text-sky-600" />
         <Card label="Revenue collected" value={formatINR(revenue)} sub={`${payments.length} payments`} icon={Wallet} tone="bg-emerald-50 text-emerald-600" />
         <Card label="Outstanding" value={formatINR(outstanding)} sub={`${unpaid.length} unpaid invoices`} icon={Clock} tone="bg-amber-50 text-amber-600" />
         <Card label="Overdue" value={formatINR(overdueAmount)} sub={`${summary.overdue_count ?? overdueList.length} invoices past due`} icon={TriangleAlert} tone="bg-red-50 text-red-600" />
-      </div>
+      </motion.div>
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm lg:col-span-2">
@@ -151,15 +171,15 @@ export default function Dashboard() {
               <AreaChart data={revenueByMonth}>
                 <defs>
                   <linearGradient id="rev" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#6366f1" stopOpacity={0.35} />
-                    <stop offset="100%" stopColor="#6366f1" stopOpacity={0} />
+                    <stop offset="0%" stopColor="#16a34a" stopOpacity={0.28} />
+                    <stop offset="100%" stopColor="#16a34a" stopOpacity={0} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                <XAxis dataKey="label" tick={{ fontSize: 12, fill: "#64748b" }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 12, fill: "#64748b" }} axisLine={false} tickLine={false} tickFormatter={rupeeTick} />
+                <XAxis dataKey="label" tick={{ fontSize: 12, fill: "#475569" }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 12, fill: "#475569" }} axisLine={false} tickLine={false} tickFormatter={rupeeTick} />
                 <Tooltip formatter={(v: any) => [`₹${Number(v).toLocaleString("en-IN")}`, "Revenue"]} />
-                <Area type="monotone" dataKey="revenue" stroke="#6366f1" strokeWidth={2.5} fill="url(#rev)" />
+                <Area type="monotone" dataKey="revenue" stroke="#166534" strokeWidth={2.5} fill="url(#rev)" />
               </AreaChart>
             </ResponsiveContainer>
           </div>
@@ -211,10 +231,10 @@ export default function Dashboard() {
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={forecast.points}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                <XAxis dataKey="label" tick={{ fontSize: 12, fill: "#64748b" }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 12, fill: "#64748b" }} axisLine={false} tickLine={false} tickFormatter={rupeeTick} />
+                <XAxis dataKey="label" tick={{ fontSize: 12, fill: "#475569" }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 12, fill: "#475569" }} axisLine={false} tickLine={false} tickFormatter={rupeeTick} />
                 <Tooltip formatter={(v: any) => [`₹${Number(v).toLocaleString("en-IN")}`, "MRR"]} />
-                <Line type="monotone" dataKey="mrr" stroke="#8b5cf6" strokeWidth={2.5} strokeDasharray="6 4" dot={{ r: 4, fill: "#8b5cf6" }} />
+                <Line type="monotone" dataKey="mrr" stroke="#0d9488" strokeWidth={2.5} strokeDasharray="6 4" dot={{ r: 4, fill: "#0d9488" }} />
               </LineChart>
             </ResponsiveContainer>
           </div>
