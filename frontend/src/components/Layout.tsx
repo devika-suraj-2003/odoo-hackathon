@@ -1,10 +1,11 @@
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, Users, Repeat, FileText, CreditCard, Package, CalendarClock,
-  FileStack, Percent, BadgePercent, UserCog, UserRound, LogOut,
+  FileStack, Percent, BadgePercent, UserCog, UserRound, LogOut, Search,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useAuth, type Role } from "../context/AuthContext";
+import CommandPalette from "./CommandPalette";
 
 type Item = { to: string; label: string; icon: LucideIcon; roles: Role[] };
 
@@ -55,9 +56,7 @@ export default function Layout() {
     <div className="min-h-screen">
       <aside className="fixed inset-y-0 left-0 flex w-64 flex-col bg-slate-950 text-slate-300">
         <div className="flex h-16 items-center gap-3 px-6">
-          <div className="grid h-9 w-9 place-items-center rounded-xl bg-linear-to-br from-indigo-500 to-violet-500 font-extrabold text-white">
-            B
-          </div>
+          <div className="grid h-9 w-9 place-items-center rounded-xl bg-linear-to-br from-indigo-500 to-violet-500 font-extrabold text-white">B</div>
           <div>
             <p className="text-sm font-bold text-white">Brightloop</p>
             <p className="text-xs text-slate-500">Subscriptions</p>
@@ -71,9 +70,7 @@ export default function Layout() {
               to={to}
               className={({ isActive }) =>
                 `flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${
-                  isActive
-                    ? "bg-indigo-600 text-white shadow-lg shadow-indigo-900/40"
-                    : "text-slate-400 hover:bg-slate-800/70 hover:text-white"
+                  isActive ? "bg-indigo-600 text-white shadow-lg shadow-indigo-900/40" : "text-slate-400 hover:bg-slate-800/70 hover:text-white"
                 }`
               }
             >
@@ -84,10 +81,7 @@ export default function Layout() {
         </nav>
 
         <div className="border-t border-slate-800 p-3">
-          <button
-            onClick={handleLogout}
-            className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-400 transition hover:bg-slate-800/70 hover:text-white"
-          >
+          <button onClick={handleLogout} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-400 transition hover:bg-slate-800/70 hover:text-white">
             <LogOut className="h-4 w-4" />
             Log out
           </button>
@@ -95,19 +89,23 @@ export default function Layout() {
       </aside>
 
       <div className="pl-64">
-        <header className="sticky top-0 z-10 flex h-16 items-center justify-between border-b border-slate-200 bg-white/80 px-8 backdrop-blur">
+        <header className="sticky top-0 z-10 flex h-16 items-center justify-between gap-4 border-b border-slate-200 bg-white/80 px-8 backdrop-blur">
           <h1 className="text-lg font-bold text-slate-900">{current?.label ?? "Brightloop"}</h1>
           <div className="flex items-center gap-3">
-            <span className={`rounded-full px-2.5 py-1 text-xs font-semibold capitalize ${roleBadge[user.role]}`}>
-              {user.role}
-            </span>
+            <button
+              onClick={() => window.dispatchEvent(new Event("open-palette"))}
+              className="hidden items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-400 transition hover:border-slate-300 hover:text-slate-600 md:flex"
+            >
+              <Search className="h-4 w-4" />
+              <span className="w-40 text-left">Search...</span>
+              <kbd className="rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-xs">Ctrl K</kbd>
+            </button>
+            <span className={`rounded-full px-2.5 py-1 text-xs font-semibold capitalize ${roleBadge[user.role]}`}>{user.role}</span>
             <div className="text-right">
               <p className="text-sm font-semibold text-slate-900">{user.name}</p>
               <p className="text-xs text-slate-500">{user.email}</p>
             </div>
-            <div className="grid h-9 w-9 place-items-center rounded-full bg-linear-to-br from-indigo-500 to-violet-500 text-sm font-bold text-white">
-              {initials}
-            </div>
+            <div className="grid h-9 w-9 place-items-center rounded-full bg-linear-to-br from-indigo-500 to-violet-500 text-sm font-bold text-white">{initials}</div>
           </div>
         </header>
 
@@ -115,6 +113,8 @@ export default function Layout() {
           <Outlet />
         </main>
       </div>
+
+      <CommandPalette items={menu} onLogout={handleLogout} searchData={user.role !== "customer"} />
     </div>
   );
 }

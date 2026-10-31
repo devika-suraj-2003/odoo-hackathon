@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
-import { Plus, Search, Repeat, LoaderCircle, X } from "lucide-react";
+import { Plus, Search, Repeat, LoaderCircle, X, List, LayoutGrid, ArrowRight } from "lucide-react";
 import api from "../api/client";
 import { errorMessage } from "../api/errors";
 import Modal from "../components/Modal";
@@ -17,47 +17,41 @@ type Subscription = {
   plan?: { id: number; name: string; billing_period: string } | null;
   status: Status;
   start_date?: string | null;
-  expiry_date?: string | null;
   next_billing_date?: string | null;
   total?: number;
 };
-
 type Customer = { id: number; name: string; email?: string };
 type Variant = { id: number; attribute: string; value: string; extra_price: number };
 type Product = { id: number; name: string; sales_price: number; variants?: Variant[] };
 type Plan = { id: number; name: string; price: number; billing_period: string };
 type TemplateLine = { product_id: number; variant_id?: number | null; quantity: number; unit_price?: number };
 type Template = { id: number; name: string; plan_id?: number | null; lines?: TemplateLine[] };
-
 type LineForm = { product_id: string; variant_id: string; quantity: string; unit_price: string };
-type FormState = {
-  customer_id: string;
-  plan_id: string;
-  template_id: string;
-  start_date: string;
-  payment_terms: string;
-  lines: LineForm[];
-};
+type FormState = { customer_id: string; plan_id: string; template_id: string; start_date: string; payment_terms: string; lines: LineForm[] };
 
 const today = () => new Date().toISOString().slice(0, 10);
 const EMPTY_LINE: LineForm = { product_id: "", variant_id: "", quantity: "1", unit_price: "" };
-const emptyForm = (): FormState => ({
-  customer_id: "",
-  plan_id: "",
-  template_id: "",
-  start_date: today(),
-  payment_terms: "immediate",
-  lines: [{ ...EMPTY_LINE }],
-});
+const emptyForm = (): FormState => ({ customer_id: "", plan_id: "", template_id: "", start_date: today(), payment_terms: "immediate", lines: [{ ...EMPTY_LINE }] });
 
-const TABS: ("all" | Status)[] = ["all", "draft", "quotation", "confirmed", "active", "paused", "closed"];
+const STATUSES: Status[] = ["draft", "quotation", "confirmed", "active", "paused", "closed"];
+const TABS: ("all" | Status)[] = ["all", ...STATUSES];
 const TERMS = [
   { value: "immediate", label: "Immediate payment" },
   { value: "15_days", label: "15 days" },
   { value: "30_days", label: "30 days" },
   { value: "end_of_month", label: "End of month" },
 ];
+const DOT: Record<Status, string> = {
+  draft: "bg-slate-400", quotation: "bg-amber-500", confirmed: "bg-sky-500", active: "bg-emerald-500", paused: "bg-violet-500", closed: "bg-slate-300",
+};
+const NEXT: Partial<Record<Status, { key: string; label: string }>> = {
+  draft: { key: "send-quotation", label: "Send quotation" },
+  quotation: { key: "confirm", label: "Confirm" },
+  confirmed: { key: "activate", label: "Activate" },
+  paused: { key: "resume", label: "Resume" },
+};
 
+const list = (r: PromiseSettledResult<any>) => (r.status === "fulfilled" && Array.isArray(r.value.data) ? r.value.data : []);
 function formatDate(d?: string | null) {
   if (!d) return "—";
   return new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
@@ -69,6 +63,8 @@ export default function Subscriptions() {
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<"all" | Status>("all");
   const [query, setQuery] = useState("");
+  const [view, setView] = useState<"list" | "board">(() => (localStorage.getItem("subs-view") as "list" | "board") || "list");
+  const [moving, setMoving] = useState<number | null>(null);
 
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<FormState>(emptyForm());
@@ -82,7 +78,7 @@ export default function Subscriptions() {
     setLoading(true);
     try {
       const { data } = await api.get("/subscriptions");
-         setItems(Array.isArray(data) ? data : []);
+      setItems(Array.isArray(data) ? data : []);
     } catch (err) {
       toast.error(errorMessage(err, "Could not load subscriptions"), { id: "subs-load" });
     } finally {
@@ -94,21 +90,19 @@ export default function Subscriptions() {
     load();
   }, []);
 
+  function changeView(v: "list" | "board") {
+    setView(v);
+    try {
+      localStorage.setItem("subs-view", v);
+    } catch {}
+  }
+
   async function loadLookups() {
-    const [c, p, pl, t] = await Promise.allSettled([
-      api.get("/users", { params: { role: "customer" } }),
-      api.get("/products"),
-      api.get("/plans"),
-      api.get("/templates"),
-    ]);
-    const list = (r: any) => (r.status === "fulfilled" && Array.isArray(r.value.data) ? r.value.data : []);
+    const [c, p, pl, t] = await Promise.allSettled([api.get("/users", { params: { role: "customer" } }), api.get("/products"), api.get("/plans"), api.get("/templates")]);
     setCustomers(list(c));
     setProducts(list(p));
     setPlans(list(pl));
     setTemplates(list(t));
-    if ([c, p, pl, t].every((r) => r.status === "rejected")) {
-      toast.error("Could not load customers, products or plans", { id: "subs-lookups" });
-    }
   }
 
   const counts = useMemo(() => {
@@ -117,18 +111,28 @@ export default function Subscriptions() {
     return c;
   }, [items]);
 
-  const filtered = useMemo(() => {
+  const searched = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return items.filter((s) => {
-      if (tab !== "all" && s.status !== tab) return false;
-      if (!q) return true;
-      return (
-        s.number?.toLowerCase().includes(q) ||
-        s.customer?.name?.toLowerCase().includes(q) ||
-        s.plan?.name?.toLowerCase().includes(q)
-      );
-    });
-  }, [items, tab, query]);
+    if (!q) return items;
+    return items.filter((s) => s.number?.toLowerCase().includes(q) || s.customer?.name?.toLowerCase().includes(q) || s.plan?.name?.toLowerCase().includes(q));
+  }, [items, query]);
+
+  const filtered = tab === "all" ? searched : searched.filter((s) => s.status === tab);
+
+  async function moveNext(s: Subscription) {
+    const next = NEXT[s.status];
+    if (!next) return;
+    setMoving(s.id);
+    try {
+      await api.post(`/subscriptions/${s.id}/${next.key}`);
+      toast.success(`${s.number}: ${next.label} done`);
+      await load();
+    } catch (err) {
+      toast.error(errorMessage(err, `${next.label} failed`));
+    } finally {
+      setMoving(null);
+    }
+  }
 
   function openNew() {
     setForm(emptyForm());
@@ -155,20 +159,9 @@ export default function Subscriptions() {
     }));
   }
 
-  function addLine() {
-    setForm((f) => ({ ...f, lines: [...f.lines, { ...EMPTY_LINE }] }));
-  }
-
-  function removeLine(i: number) {
-    setForm((f) => ({ ...f, lines: f.lines.filter((_, idx) => idx !== i) }));
-  }
-
   function applyTemplate(id: string) {
     const t = templates.find((x) => String(x.id) === id);
-    if (!t) {
-      setForm((f) => ({ ...f, template_id: "" }));
-      return;
-    }
+    if (!t) return setForm((f) => ({ ...f, template_id: "" }));
     setForm((f) => ({
       ...f,
       template_id: id,
@@ -179,19 +172,13 @@ export default function Subscriptions() {
               product_id: String(l.product_id),
               variant_id: l.variant_id ? String(l.variant_id) : "",
               quantity: String(l.quantity ?? 1),
-              unit_price:
-                l.unit_price != null
-                  ? toRupees(l.unit_price) || "0"
-                  : priceFor(String(l.product_id), l.variant_id ? String(l.variant_id) : ""),
+              unit_price: l.unit_price != null ? toRupees(l.unit_price) || "0" : priceFor(String(l.product_id), l.variant_id ? String(l.variant_id) : ""),
             }))
           : f.lines,
     }));
   }
 
-  function lineAmount(l: LineForm) {
-    return toPaise(l.unit_price) * Math.max(0, parseInt(l.quantity) || 0);
-  }
-
+  const lineAmount = (l: LineForm) => toPaise(l.unit_price) * Math.max(0, parseInt(l.quantity) || 0);
   const subtotal = form.lines.reduce((sum, l) => sum + lineAmount(l), 0);
 
   async function handleSave(e: FormEvent) {
@@ -200,7 +187,6 @@ export default function Subscriptions() {
     if (!form.customer_id) return toast.error("Please choose a customer");
     if (!form.plan_id) return toast.error("Please choose a plan");
     if (lines.length === 0) return toast.error("Add at least one product line");
-
     const body = {
       customer_id: Number(form.customer_id),
       plan_id: Number(form.plan_id),
@@ -214,7 +200,6 @@ export default function Subscriptions() {
         unit_price: toPaise(l.unit_price),
       })),
     };
-
     setSaving(true);
     try {
       const { data } = await api.post("/subscriptions", body);
@@ -231,21 +216,41 @@ export default function Subscriptions() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap gap-2">
-        {TABS.map((t) => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={`inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-sm font-semibold capitalize transition ${
-              tab === t ? "bg-indigo-600 text-white shadow-sm" : "bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50"
-            }`}
-          >
-            {t}
-            <span className={`rounded-md px-1.5 text-xs ${tab === t ? "bg-white/20" : "bg-slate-100 text-slate-500"}`}>
-              {counts[t] ?? 0}
-            </span>
-          </button>
-        ))}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        {view === "list" ? (
+          <div className="flex flex-wrap gap-2">
+            {TABS.map((t) => (
+              <button
+                key={t}
+                onClick={() => setTab(t)}
+                className={`inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-sm font-semibold capitalize transition ${
+                  tab === t ? "bg-indigo-600 text-white shadow-sm" : "bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50"
+                }`}
+              >
+                {t}
+                <span className={`rounded-md px-1.5 text-xs ${tab === t ? "bg-white/20" : "bg-slate-100 text-slate-500"}`}>{counts[t] ?? 0}</span>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-slate-500">Click the arrow on a card to move it to the next stage.</p>
+        )}
+        <div className="flex rounded-xl bg-white p-1 ring-1 ring-slate-200">
+          {(["list", "board"] as const).map((v) => {
+            const Icon = v === "list" ? List : LayoutGrid;
+            return (
+              <button
+                key={v}
+                onClick={() => changeView(v)}
+                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-semibold capitalize transition ${
+                  view === v ? "bg-indigo-600 text-white" : "text-slate-500 hover:text-slate-800"
+                }`}
+              >
+                <Icon className="h-4 w-4" /> {v}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -263,62 +268,111 @@ export default function Subscriptions() {
         </button>
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <table className="w-full text-sm">
-          <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-            <tr>
-              <th className="px-5 py-3">Number</th>
-              <th className="px-5 py-3">Customer</th>
-              <th className="px-5 py-3">Plan</th>
-              <th className="px-5 py-3">Status</th>
-              <th className="px-5 py-3">Start</th>
-              <th className="px-5 py-3">Next billing</th>
-              <th className="px-5 py-3 text-right">Total</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {loading &&
-              [1, 2, 3, 4].map((i) => (
-                <tr key={i}>
-                  <td colSpan={7} className="px-5 py-4">
-                    <div className="h-4 w-full animate-pulse rounded bg-slate-100" />
-                  </td>
-                </tr>
-              ))}
-
-            {!loading && filtered.length === 0 && (
+      {view === "board" ? (
+        <div className="flex gap-4 overflow-x-auto pb-2">
+          {STATUSES.map((st) => {
+            const cards = searched.filter((s) => s.status === st);
+            return (
+              <div key={st} className="w-72 shrink-0 rounded-2xl bg-slate-100/70 p-3">
+                <div className="mb-3 flex items-center justify-between px-1">
+                  <span className="flex items-center gap-2 text-sm font-bold capitalize text-slate-700">
+                    <span className={`h-2.5 w-2.5 rounded-full ${DOT[st]}`} /> {st}
+                  </span>
+                  <span className="rounded-md bg-white px-2 py-0.5 text-xs font-semibold text-slate-500">{cards.length}</span>
+                </div>
+                <div className="space-y-2">
+                  {cards.length === 0 && <p className="rounded-xl border border-dashed border-slate-300 p-4 text-center text-xs text-slate-400">Empty</p>}
+                  {cards.map((s) => {
+                    const next = NEXT[s.status];
+                    return (
+                      <div
+                        key={s.id}
+                        onClick={() => navigate(`/subscriptions/${s.id}`)}
+                        className="cursor-pointer rounded-xl bg-white p-3 shadow-sm ring-1 ring-slate-200 transition hover:-translate-y-0.5 hover:shadow-md"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-semibold text-indigo-600">{s.number}</span>
+                          <span className="text-sm font-bold text-slate-900">{formatINR(s.total)}</span>
+                        </div>
+                        <p className="mt-1.5 font-semibold text-slate-900">{s.customer?.name ?? "—"}</p>
+                        <p className="text-xs text-slate-500">{s.plan?.name ?? "—"}</p>
+                        {next && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              moveNext(s);
+                            }}
+                            disabled={moving !== null}
+                            className="mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-indigo-50 py-1.5 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-100 disabled:opacity-60"
+                          >
+                            {moving === s.id ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <ArrowRight className="h-3.5 w-3.5" />}
+                            {next.label}
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
               <tr>
-                <td colSpan={7} className="px-5 py-16 text-center">
-                  <Repeat className="mx-auto h-10 w-10 text-slate-300" />
-                  <p className="mt-3 font-semibold text-slate-700">No subscriptions here</p>
-                  <p className="text-sm text-slate-500">Create a subscription from a plan or a quotation template.</p>
-                </td>
+                <th className="px-5 py-3">Number</th>
+                <th className="px-5 py-3">Customer</th>
+                <th className="px-5 py-3">Plan</th>
+                <th className="px-5 py-3">Status</th>
+                <th className="px-5 py-3">Start</th>
+                <th className="px-5 py-3">Next billing</th>
+                <th className="px-5 py-3 text-right">Total</th>
               </tr>
-            )}
-
-            {!loading &&
-              filtered.map((s) => (
-                <tr key={s.id} onClick={() => navigate(`/subscriptions/${s.id}`)} className="cursor-pointer transition hover:bg-slate-50/70">
-                  <td className="px-5 py-4 font-semibold text-indigo-600">{s.number}</td>
-                  <td className="px-5 py-4">
-                    <p className="font-medium text-slate-900">{s.customer?.name ?? "—"}</p>
-                    {s.customer?.email && <p className="text-xs text-slate-500">{s.customer.email}</p>}
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {loading &&
+                [1, 2, 3, 4].map((i) => (
+                  <tr key={i}>
+                    <td colSpan={7} className="px-5 py-4">
+                      <div className="h-4 w-full animate-pulse rounded bg-slate-100" />
+                    </td>
+                  </tr>
+                ))}
+              {!loading && filtered.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="px-5 py-16 text-center">
+                    <Repeat className="mx-auto h-10 w-10 text-slate-300" />
+                    <p className="mt-3 font-semibold text-slate-700">No subscriptions here</p>
+                    <p className="text-sm text-slate-500">Create a subscription from a plan or a quotation template.</p>
                   </td>
-                  <td className="px-5 py-4">
-                    <p className="text-slate-800">{s.plan?.name ?? "—"}</p>
-                    {s.plan?.billing_period && <p className="text-xs capitalize text-slate-500">{s.plan.billing_period}</p>}
-                  </td>
-                  <td className="px-5 py-4">
-                    <StatusBadge status={s.status} />
-                  </td>
-                  <td className="px-5 py-4 text-slate-600">{formatDate(s.start_date)}</td>
-                  <td className="px-5 py-4 text-slate-600">{formatDate(s.next_billing_date)}</td>
-                  <td className="px-5 py-4 text-right font-semibold text-slate-900">{formatINR(s.total)}</td>
                 </tr>
-              ))}
-          </tbody>
-        </table>
-      </div>
+              )}
+              {!loading &&
+                filtered.map((s) => (
+                  <tr key={s.id} onClick={() => navigate(`/subscriptions/${s.id}`)} className="cursor-pointer transition hover:bg-slate-50/70">
+                    <td className="px-5 py-4 font-semibold text-indigo-600">{s.number}</td>
+                    <td className="px-5 py-4">
+                      <p className="font-medium text-slate-900">{s.customer?.name ?? "—"}</p>
+                      {s.customer?.email && <p className="text-xs text-slate-500">{s.customer.email}</p>}
+                    </td>
+                    <td className="px-5 py-4">
+                      <p className="text-slate-800">{s.plan?.name ?? "—"}</p>
+                      {s.plan?.billing_period && <p className="text-xs capitalize text-slate-500">{s.plan.billing_period}</p>}
+                    </td>
+                    <td className="px-5 py-4">
+                      <StatusBadge status={s.status} />
+                    </td>
+                    <td className="px-5 py-4 text-slate-600">{formatDate(s.start_date)}</td>
+                    <td className="px-5 py-4 text-slate-600">{formatDate(s.next_billing_date)}</td>
+                    <td className="px-5 py-4 text-right font-semibold text-slate-900">{formatINR(s.total)}</td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       <Modal open={open} title="New subscription" onClose={() => setOpen(false)} wide>
         <form onSubmit={handleSave} className="space-y-5">
@@ -376,11 +430,10 @@ export default function Subscriptions() {
           <div>
             <div className="mb-2 flex items-center justify-between">
               <label className="text-sm font-medium text-slate-700">Order lines</label>
-              <button type="button" onClick={addLine} className="inline-flex items-center gap-1 text-sm font-semibold text-indigo-600 hover:text-indigo-700">
+              <button type="button" onClick={() => setForm((f) => ({ ...f, lines: [...f.lines, { ...EMPTY_LINE }] }))} className="inline-flex items-center gap-1 text-sm font-semibold text-indigo-600 hover:text-indigo-700">
                 <Plus className="h-4 w-4" /> Add line
               </button>
             </div>
-
             <div className="grid grid-cols-[2fr_1.5fr_4.5rem_6.5rem_6rem_2rem] gap-2 px-1 pb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
               <span>Product</span>
               <span>Variant</span>
@@ -389,11 +442,9 @@ export default function Subscriptions() {
               <span className="text-right">Amount</span>
               <span />
             </div>
-
             <div className="space-y-2">
               {form.lines.map((l, i) => {
-                const product = products.find((p) => String(p.id) === l.product_id);
-                const variants = product?.variants ?? [];
+                const variants = products.find((p) => String(p.id) === l.product_id)?.variants ?? [];
                 return (
                   <div key={i} className="grid grid-cols-[2fr_1.5fr_4.5rem_6.5rem_6rem_2rem] items-center gap-2">
                     <select value={l.product_id} onChange={(e) => setLine(i, "product_id", e.target.value)} className={inputCls}>
@@ -404,12 +455,7 @@ export default function Subscriptions() {
                         </option>
                       ))}
                     </select>
-                    <select
-                      value={l.variant_id}
-                      onChange={(e) => setLine(i, "variant_id", e.target.value)}
-                      disabled={variants.length === 0}
-                      className={`${inputCls} disabled:bg-slate-50 disabled:text-slate-400`}
-                    >
+                    <select value={l.variant_id} onChange={(e) => setLine(i, "variant_id", e.target.value)} disabled={variants.length === 0} className={`${inputCls} disabled:bg-slate-50 disabled:text-slate-400`}>
                       <option value="">{variants.length ? "Standard" : "—"}</option>
                       {variants.map((v) => (
                         <option key={v.id} value={v.id}>
@@ -422,7 +468,7 @@ export default function Subscriptions() {
                     <span className="text-right text-sm font-semibold text-slate-800">{formatINR(lineAmount(l))}</span>
                     <button
                       type="button"
-                      onClick={() => removeLine(i)}
+                      onClick={() => setForm((f) => ({ ...f, lines: f.lines.filter((_, idx) => idx !== i) }))}
                       disabled={form.lines.length === 1}
                       className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-30"
                     >
@@ -432,7 +478,6 @@ export default function Subscriptions() {
                 );
               })}
             </div>
-
             <div className="mt-4 flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3">
               <p className="text-xs text-slate-500">Taxes and discounts are applied automatically on the invoice.</p>
               <p className="text-sm">
@@ -446,7 +491,7 @@ export default function Subscriptions() {
             <button type="button" onClick={() => setOpen(false)} className={btnSecondary}>
               Cancel
             </button>
-            <button type="submit" disabled={saving} className={`${btnPrimary.replace("w-full", "")}`}>
+            <button type="submit" disabled={saving} className={btnPrimary.replace("w-full", "")}>
               {saving && <LoaderCircle className="h-4 w-4 animate-spin" />}
               Create subscription
             </button>
