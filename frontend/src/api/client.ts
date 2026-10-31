@@ -20,7 +20,8 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     const url: string = error.config?.url || "";
-    if (error.response?.status === 401 && url.startsWith("/auth/me")) {
+    const detail = String(error.response?.data?.detail ?? "").toLowerCase();
+    if (error.response?.status === 401 && (url.startsWith("/auth/me") || detail.includes("expired"))) {
       localStorage.removeItem("token");
       localStorage.removeItem("user");
       window.location.href = "/login";

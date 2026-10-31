@@ -73,7 +73,7 @@ export default function TimeMachineBar({ onChanged }: { onChanged: () => void })
       const today = data.simulated_today;
       setClock({ today, simulated: true });
       setRuns([]);
-      const n = await billDue(today);
+      const n = (data.invoices_generated ?? 0) + (await billDue(today));
       toast.success(`Jumped to ${nice(today)} · ${n} invoice${n === 1 ? "" : "s"} created`, { duration: 4000 });
       onChanged();
     } catch (err) {
