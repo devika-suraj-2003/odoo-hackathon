@@ -14,6 +14,9 @@ import SubscriptionDetail from "./pages/SubscriptionDetail";
 import Invoices from "./pages/Invoices";
 import InvoiceDetail from "./pages/InvoiceDetail";
 import Payments from "./pages/Payments";
+import PortalSubscriptions from "./pages/PortalSubscriptions";
+import PortalInvoices from "./pages/PortalInvoices";
+import PortalProfile from "./pages/PortalProfile";
 
 function Home() {
   const { user } = useAuth();
@@ -51,9 +54,9 @@ export default function App() {
           </Route>
 
           <Route element={<ProtectedRoute roles={["customer"]} />}>
-            <Route path="/portal/subscriptions" element={<Placeholder title="My subscriptions" />} />
-            <Route path="/portal/invoices" element={<Placeholder title="My invoices" />} />
-            <Route path="/portal/profile" element={<Placeholder title="Profile" />} />
+            <Route path="/portal/subscriptions" element={<PortalSubscriptions />} />
+            <Route path="/portal/invoices" element={<PortalInvoices />} />
+            <Route path="/portal/profile" element={<PortalProfile />} />
           </Route>
         </Route>
       </Route>
