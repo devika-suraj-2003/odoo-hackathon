@@ -1,7 +1,11 @@
 import os
 from pathlib import Path
+from dotenv import load_dotenv
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, DeclarativeBase
+
+# Load backend-local configuration before constructing the engine.
+load_dotenv(Path(__file__).resolve().parents[1] / ".env", override=False)
 
 # Database configuration
 BASE_DIR = Path(__file__).resolve().parent.parent.parent

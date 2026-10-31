@@ -10,8 +10,6 @@ import { formatINR } from "../lib/money";
 type Payment = {
   id: number;
   invoice_id: number;
-  invoice_number?: string;
-  customer?: { id: number; name: string } | null;
   method: string;
   amount: number;
   payment_date?: string | null;
@@ -71,7 +69,8 @@ export default function Payments() {
       const [p, i] = await Promise.allSettled([api.get("/payments"), api.get("/invoices")]);
       setPayments(p.status === "fulfilled" && Array.isArray(p.value.data) ? p.value.data : []);
       setInvoices(i.status === "fulfilled" && Array.isArray(i.value.data) ? i.value.data : []);
-      if (p.status === "rejected" && i.status === "rejected") toast.error("Could not load payments", { id: "pay-load" });
+      if (p.status === "rejected") toast.error("Could not load payments", { id: "pay-load" });
+      if (i.status === "rejected") toast.error("Could not load invoices", { id: "inv-pay-load" });
       setLoading(false);
     })();
   }, []);
@@ -87,7 +86,13 @@ export default function Payments() {
 
   const q = query.trim().toLowerCase();
   const shownPayments = payments.filter(
-    (p) => !q || p.invoice_number?.toLowerCase().includes(q) || p.customer?.name?.toLowerCase().includes(q) || p.method?.includes(q)
+    (p) => {
+      const invoice = invoices.find((item) => item.id === p.invoice_id);
+      return !q ||
+        invoice?.number?.toLowerCase().includes(q) ||
+        invoice?.customer?.name?.toLowerCase().includes(q) ||
+        p.method?.includes(q);
+    }
   );
   const shownInvoices = (tab === "overdue" ? overdue : outstanding).filter(
     (inv) => !q || inv.number?.toLowerCase().includes(q) || inv.customer?.name?.toLowerCase().includes(q)
@@ -163,8 +168,8 @@ export default function Payments() {
                 shownPayments.map((p) => (
                   <tr key={p.id} onClick={() => navigate(`/invoices/${p.invoice_id}`)} className="cursor-pointer transition hover:bg-slate-50/70">
                     <td className="px-5 py-4 text-slate-600">{formatDate(p.payment_date)}</td>
-                    <td className="px-5 py-4 font-semibold text-indigo-600">{p.invoice_number ?? `#${p.invoice_id}`}</td>
-                    <td className="px-5 py-4 font-medium text-slate-900">{p.customer?.name ?? "—"}</td>
+                    <td className="px-5 py-4 font-semibold text-indigo-600">{invoices.find((item) => item.id === p.invoice_id)?.number ?? `#${p.invoice_id}`}</td>
+                    <td className="px-5 py-4 font-medium text-slate-900">{invoices.find((item) => item.id === p.invoice_id)?.customer?.name ?? "—"}</td>
                     <td className="px-5 py-4">
                       <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium capitalize text-slate-700">{p.method?.replace(/_/g, " ")}</span>
                     </td>

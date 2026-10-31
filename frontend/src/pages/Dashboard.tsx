@@ -1,21 +1,30 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Area, AreaChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import toast from "react-hot-toast";
 import { Repeat, TrendingUp, Wallet, Clock, TriangleAlert, IndianRupee, Zap } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import api from "../api/client";
+import { errorMessage } from "../api/errors";
 import { useAuth } from "../context/AuthContext";
 import StatusBadge from "../components/StatusBadge";
 import { formatINR } from "../lib/money";
 
 type Sub = { id: number; number: string; status: string; total?: number; customer?: { name: string } | null; plan?: { name: string; billing_period: string } | null; next_billing_date?: string | null };
 type Invoice = { id: number; number: string; status: string; due_date?: string | null; total: number; amount_due?: number; customer?: { name: string } | null };
-type Payment = { id: number; amount: number; payment_date?: string | null };
-type Summary = Partial<{ active_subscriptions: number; mrr: number; arr: number; revenue: number; outstanding: number; overdue_amount: number; overdue_count: number }>;
+type Summary = {
+  active_subscriptions: number;
+  mrr: number;
+  arr: number;
+  revenue: number;
+  payments_total: number;
+  outstanding: number;
+  overdue_amount: number;
+  overdue_count: number;
+};
+type MonthRevenue = { month: string; revenue: number };
 
-const todayStr = () => new Date().toISOString().slice(0, 10);
 const arr = (r: PromiseSettledResult<any>) => (r.status === "fulfilled" && Array.isArray(r.value.data) ? r.value.data : []);
-const MONTHLY: Record<string, number> = { daily: 30, weekly: 4.33, monthly: 1, yearly: 1 / 12 };
 const STATUS_COLORS: Record<string, string> = {
   draft: "#94a3b8", quotation: "#f59e0b", confirmed: "#0ea5e9", active: "#10b981", paused: "#8b5cf6", closed: "#cbd5e1",
 };
@@ -40,48 +49,46 @@ export default function Dashboard() {
   const { user } = useAuth();
   const [subs, setSubs] = useState<Sub[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [payments, setPayments] = useState<Payment[]>([]);
-  const [summary, setSummary] = useState<Summary>({});
+  const [summary, setSummary] = useState<Summary | null>(null);
+  const [revenueByMonth, setRevenueByMonth] = useState<{ key: string; label: string; revenue: number }[]>([]);
   const [loading, setLoading] = useState(true);
   const [ms, setMs] = useState<number | null>(null);
 
   useEffect(() => {
     (async () => {
       const t0 = performance.now();
-      const [s, i, p, r] = await Promise.allSettled([api.get("/subscriptions"), api.get("/invoices"), api.get("/payments"), api.get("/reports/summary")]);
+      const [s, i, r, monthly] = await Promise.allSettled([
+        api.get("/subscriptions"),
+        api.get("/invoices"),
+        api.get("/reports/summary"),
+        api.get("/reports/monthly-revenue", { params: { months: 6 } }),
+      ]);
       setSubs(arr(s));
       setInvoices(arr(i));
-      setPayments(arr(p));
-      setSummary(r.status === "fulfilled" && r.value.data && typeof r.value.data === "object" ? r.value.data : {});
+      if (r.status === "fulfilled" && r.value.data && typeof r.value.data === "object") {
+        setSummary(r.value.data as Summary);
+      } else {
+        toast.error(errorMessage(r.status === "rejected" ? r.reason : null, "Could not load report summary"), { id: "dashboard-report" });
+      }
+      if (monthly.status === "fulfilled" && Array.isArray(monthly.value.data)) {
+        setRevenueByMonth(
+          (monthly.value.data as MonthRevenue[]).map((item) => ({
+            key: item.month,
+            label: new Date(`${item.month}-01T00:00:00`).toLocaleDateString("en-IN", { month: "short" }),
+            revenue: item.revenue / 100,
+          }))
+        );
+      } else {
+        toast.error(errorMessage(monthly.status === "rejected" ? monthly.reason : null, "Could not load monthly revenue"), { id: "dashboard-monthly" });
+      }
       setMs(Math.round(performance.now() - t0));
       setLoading(false);
     })();
   }, []);
 
   const active = subs.filter((s) => s.status === "active");
-  const computedMrr = active.reduce((sum, s) => sum + (s.total ?? 0) * (MONTHLY[s.plan?.billing_period ?? "monthly"] ?? 1), 0);
-  const mrr = summary.mrr ?? Math.round(computedMrr);
-  const arrValue = summary.arr ?? mrr * 12;
-  const revenue = summary.revenue ?? payments.reduce((s, p) => s + (p.amount ?? 0), 0);
   const unpaid = invoices.filter((i) => i.status === "confirmed" && (i.amount_due ?? i.total) > 0);
-  const overdueList = unpaid.filter((i) => !!i.due_date && i.due_date < todayStr());
-  const outstanding = summary.outstanding ?? unpaid.reduce((s, i) => s + (i.amount_due ?? i.total), 0);
-  const overdueAmount = summary.overdue_amount ?? overdueList.reduce((s, i) => s + (i.amount_due ?? i.total), 0);
-
-  const revenueByMonth = useMemo(() => {
-    const months: { key: string; label: string; revenue: number }[] = [];
-    const now = new Date();
-    for (let k = 5; k >= 0; k--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - k, 1);
-      months.push({ key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`, label: d.toLocaleDateString("en-IN", { month: "short" }), revenue: 0 });
-    }
-    for (const p of payments) {
-      const key = (p.payment_date ?? "").slice(0, 7);
-      const m = months.find((x) => x.key === key);
-      if (m) m.revenue += (p.amount ?? 0) / 100;
-    }
-    return months;
-  }, [payments]);
+  const overdueList = unpaid.filter((i) => !!i.due_date && i.due_date < new Date().toISOString().slice(0, 10));
 
   const byStatus = useMemo(() => {
     const c: Record<string, number> = {};
@@ -109,12 +116,12 @@ export default function Dashboard() {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        <Card label="Monthly recurring revenue" value={formatINR(mrr)} sub="MRR from active subscriptions" icon={TrendingUp} tone="bg-indigo-50 text-indigo-600" />
-        <Card label="Annual recurring revenue" value={formatINR(arrValue)} sub="ARR = MRR × 12" icon={IndianRupee} tone="bg-violet-50 text-violet-600" />
-        <Card label="Active subscriptions" value={String(summary.active_subscriptions ?? active.length)} sub={`${subs.length} total`} icon={Repeat} tone="bg-sky-50 text-sky-600" />
-        <Card label="Revenue collected" value={formatINR(revenue)} sub={`${payments.length} payments`} icon={Wallet} tone="bg-emerald-50 text-emerald-600" />
-        <Card label="Outstanding" value={formatINR(outstanding)} sub={`${unpaid.length} unpaid invoices`} icon={Clock} tone="bg-amber-50 text-amber-600" />
-        <Card label="Overdue" value={formatINR(overdueAmount)} sub={`${summary.overdue_count ?? overdueList.length} invoices past due`} icon={TriangleAlert} tone="bg-red-50 text-red-600" />
+        <Card label="Monthly recurring revenue" value={summary ? formatINR(summary.mrr) : "—"} sub="MRR from active subscriptions" icon={TrendingUp} tone="bg-indigo-50 text-indigo-600" />
+        <Card label="Annual recurring revenue" value={summary ? formatINR(summary.arr) : "—"} sub="ARR = MRR × 12" icon={IndianRupee} tone="bg-violet-50 text-violet-600" />
+        <Card label="Active subscriptions" value={summary ? String(summary.active_subscriptions) : "—"} sub={`${subs.length} total`} icon={Repeat} tone="bg-sky-50 text-sky-600" />
+        <Card label="Revenue collected" value={summary ? formatINR(summary.revenue) : "—"} sub={summary ? `Payments total ${formatINR(summary.payments_total)}` : "From recorded payments"} icon={Wallet} tone="bg-emerald-50 text-emerald-600" />
+        <Card label="Outstanding" value={summary ? formatINR(summary.outstanding) : "—"} sub={`${unpaid.length} unpaid invoices`} icon={Clock} tone="bg-amber-50 text-amber-600" />
+        <Card label="Overdue" value={summary ? formatINR(summary.overdue_amount) : "—"} sub={`${summary?.overdue_count ?? overdueList.length} invoices past due`} icon={TriangleAlert} tone="bg-red-50 text-red-600" />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">

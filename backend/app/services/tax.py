@@ -9,6 +9,7 @@ seed data handling, and integration helpers for Invoices & Subscriptions.
 import os
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Any, Dict, List, Optional
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models.tax import Tax
@@ -20,7 +21,7 @@ ROUNDING_RULE_DESCRIPTION = "ROUND_HALF_UP to nearest 1 paise (0.50 paise rounds
 
 def get_company_state() -> str:
     """Retrieve company operating state for GST jurisdiction from environment."""
-    return os.getenv("COMPANY_STATE", "Karnataka").strip()
+    return os.getenv("COMPANY_STATE", "Kerala").strip() or "Kerala"
 
 
 # ==============================================================================
@@ -50,6 +51,8 @@ def calculate_tax(
     """
     if subtotal_paise < 0:
         raise ValueError("subtotal_paise cannot be negative.")
+    if not tax_rate.is_finite():
+        raise ValueError("tax_rate must be a finite number.")
     if not (Decimal("0.0") <= tax_rate <= Decimal("100.0")):
         raise ValueError("tax_rate must be between 0.00 and 100.00 percent.")
 
@@ -99,6 +102,7 @@ def calculate_gst(
     if not customer_state or not customer_state.strip():
         raise ValueError("customer_state is required for GST calculation.")
 
+    base_calculation = calculate_tax(subtotal_paise, tax_rate)
     effective_company_state = (company_state or get_company_state()).strip()
     cust_state_clean = customer_state.strip()
 
@@ -108,20 +112,17 @@ def calculate_gst(
         # Split into equal halves for CGST and SGST
         half_rate = tax_rate / Decimal("2")
         cgst_dec = (Decimal(subtotal_paise) * half_rate) / Decimal("100")
-        sgst_dec = (Decimal(subtotal_paise) * half_rate) / Decimal("100")
-
         cgst_paise = int(cgst_dec.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
-        sgst_paise = int(sgst_dec.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+        sgst_paise = base_calculation["tax_amount_paise"] - cgst_paise
         igst_paise = 0
         igst_rate = Decimal("0.0")
         cgst_rate = half_rate
         sgst_rate = half_rate
-        tax_amount_paise = cgst_paise + sgst_paise
+        tax_amount_paise = base_calculation["tax_amount_paise"]
     else:
         # Full rate applies as IGST
         igst_rate = tax_rate
-        igst_dec = (Decimal(subtotal_paise) * igst_rate) / Decimal("100")
-        igst_paise = int(igst_dec.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+        igst_paise = base_calculation["tax_amount_paise"]
         cgst_paise = 0
         sgst_paise = 0
         cgst_rate = Decimal("0.0")
@@ -199,8 +200,8 @@ def get_tax_by_id(db: Session, tax_id: int) -> Optional[Tax]:
 
 
 def get_tax_by_name(db: Session, name: str) -> Optional[Tax]:
-    """Retrieve a tax record by exact name."""
-    return db.query(Tax).filter(Tax.name == name.strip()).first()
+    """Retrieve a tax record by name, ignoring surrounding whitespace and case."""
+    return db.query(Tax).filter(func.lower(Tax.name) == name.strip().lower()).first()
 
 
 def create_tax(db: Session, tax_in: TaxCreate) -> Tax:

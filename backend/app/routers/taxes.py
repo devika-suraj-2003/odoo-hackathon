@@ -181,12 +181,24 @@ def calculate_tax_endpoint(
     - **customer_state**: (Optional) Customer's state. When provided, calculates Indian GST
       intra-state split (CGST + SGST) or inter-state (IGST) against configured company state.
     """
+    if calc_in.tax_id is not None and calc_in.tax_rate is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Specify either 'tax_id' or 'tax_rate', not both.",
+        )
+
+    tax = None
     if calc_in.tax_id is not None:
         tax = tax_service.get_tax_by_id(db, calc_in.tax_id)
         if not tax:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Tax rule with ID {calc_in.tax_id} was not found.",
+            )
+        if not tax.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Tax rule with ID {calc_in.tax_id} is deactivated and cannot be applied.",
             )
         rate = tax.rate
     elif calc_in.tax_rate is not None:
@@ -198,7 +210,9 @@ def calculate_tax_endpoint(
         )
 
     try:
-        if calc_in.customer_state and calc_in.customer_state.strip():
+        if calc_in.customer_state and (
+            tax is None or tax.tax_type.lower() == "gst"
+        ):
             gst_res = tax_service.calculate_gst(
                 subtotal_paise=calc_in.subtotal_paise,
                 tax_rate=rate,

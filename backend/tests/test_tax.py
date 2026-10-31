@@ -6,6 +6,7 @@ import sys
 import os
 from decimal import Decimal
 import unittest
+from unittest.mock import patch
 
 # Ensure backend directory is in sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -16,6 +17,7 @@ from app.services.tax import (
     calculate_gst,
     apply_tax_to_amount,
     DEFAULT_TAX_SEEDS,
+    get_company_state,
 )
 
 
@@ -85,8 +87,8 @@ class TestTaxCalculations(unittest.TestCase):
         res = calculate_gst(
             subtotal_paise=10000,
             tax_rate=Decimal("18.00"),
-            customer_state="Karnataka",
-            company_state="Karnataka",
+            customer_state="Kerala",
+            company_state="Kerala",
         )
         self.assertEqual(res["tax_amount_paise"], 1800)
         self.assertEqual(res["total_paise"], 11800)
@@ -114,7 +116,7 @@ class TestTaxCalculations(unittest.TestCase):
             subtotal_paise=10000,
             tax_rate=Decimal("18.00"),
             customer_state="Maharashtra",
-            company_state="Karnataka",
+            company_state="Kerala",
         )
         self.assertEqual(res["tax_amount_paise"], 1800)
         self.assertEqual(res["total_paise"], 11800)
@@ -125,6 +127,28 @@ class TestTaxCalculations(unittest.TestCase):
         self.assertEqual(breakdown["igst_amount_paise"], 1800)
         self.assertEqual(breakdown["cgst_amount_paise"], 0)
         self.assertEqual(breakdown["sgst_amount_paise"], 0)
+
+    def test_intra_state_gst_rounding_components_equal_total(self):
+        """Rounded CGST and SGST components must sum to the rounded GST total."""
+        result = calculate_gst(
+            subtotal_paise=10,
+            tax_rate=Decimal("5.00"),
+            customer_state="Kerala",
+            company_state="Kerala",
+        )
+        breakdown = result["gst_breakdown"]
+        self.assertEqual(result["tax_amount_paise"], 1)
+        self.assertEqual(
+            breakdown["cgst_amount_paise"] + breakdown["sgst_amount_paise"],
+            result["tax_amount_paise"],
+        )
+
+    def test_company_state_defaults_to_kerala(self):
+        """Kerala is the company-state fallback when configuration is blank or absent."""
+        with patch.dict(os.environ, {}, clear=True):
+            self.assertEqual(get_company_state(), "Kerala")
+        with patch.dict(os.environ, {"COMPANY_STATE": "  "}):
+            self.assertEqual(get_company_state(), "Kerala")
 
     def test_apply_tax_to_amount_integration(self):
         """Test the integration helper apply_tax_to_amount for invoice line calculations."""
@@ -139,7 +163,7 @@ class TestTaxCalculations(unittest.TestCase):
         res = apply_tax_to_amount(
             subtotal_paise=20000,
             tax=active_tax,
-            customer_state="Karnataka",
+            customer_state="Kerala",
         )
         self.assertEqual(res["total_paise"], 23600)
         self.assertTrue(res["gst_breakdown"]["is_intra_state"])

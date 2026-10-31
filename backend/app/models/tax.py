@@ -8,6 +8,7 @@ Monetary calculations using this tax must be performed in integer paise (₹1 = 
 
 from datetime import datetime, timezone
 from sqlalchemy import Boolean, Column, DateTime, Integer, Numeric, String
+from sqlalchemy.orm import relationship
 from app.database import Base
 
 
@@ -37,6 +38,7 @@ class Tax(Base):
         onupdate=lambda: datetime.now(timezone.utc),
         nullable=False,
     )
+    subscription_lines = relationship("SubscriptionLine", back_populates="tax")
 
     def __repr__(self) -> str:
         return f"<Tax id={self.id} name='{self.name}' rate={self.rate}% type='{self.tax_type}' active={self.is_active}>"

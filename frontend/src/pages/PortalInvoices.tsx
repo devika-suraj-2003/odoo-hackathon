@@ -1,24 +1,69 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import toast from "react-hot-toast";
-import { FileText, Download, CreditCard, LoaderCircle, Clock, TriangleAlert } from "lucide-react";
+import { FileText, Download, CreditCard, LoaderCircle, Clock, TriangleAlert, ReceiptText } from "lucide-react";
 import api from "../api/client";
 import { errorMessage } from "../api/errors";
 import { useAuth } from "../context/AuthContext";
 import StatusBadge from "../components/StatusBadge";
 import { formatINR } from "../lib/money";
 
-type Invoice = { id: number; number: string; status: string; invoice_date?: string | null; due_date?: string | null; total: number; amount_due?: number };
+type Invoice = {
+  id: number;
+  number: string;
+  status: string;
+  invoice_date?: string | null;
+  due_date?: string | null;
+  total: number;
+  amount_paid?: number;
+  amount_due?: number;
+};
+type Payment = {
+  id: number;
+  invoice_id: number;
+  method: string;
+  amount: number;
+  payment_date: string;
+  note?: string | null;
+};
+type RazorpayPaymentResponse = {
+  razorpay_order_id: string;
+  razorpay_payment_id: string;
+  razorpay_signature: string;
+};
+type RazorpayOptions = {
+  key: string;
+  amount: number;
+  currency: string;
+  order_id: string;
+  name: string;
+  description: string;
+  prefill: { name?: string; email?: string };
+  theme: { color: string };
+  handler: (response: RazorpayPaymentResponse) => void;
+  modal: { ondismiss: () => void };
+};
+type RazorpayCheckout = { open: () => void; on: (event: string, callback: (response: { error?: { description?: string } }) => void) => void };
+type RazorpayConstructor = new (options: RazorpayOptions) => RazorpayCheckout;
+
+declare global {
+  interface Window {
+    Razorpay?: RazorpayConstructor;
+  }
+}
 
 const todayStr = () => new Date().toISOString().slice(0, 10);
 const fmt = (d?: string | null) => (d ? new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—");
 
 function loadRazorpay(): Promise<boolean> {
   return new Promise((resolve) => {
-    if ((window as any).Razorpay) return resolve(true);
+    if (window.Razorpay) return resolve(true);
     const s = document.createElement("script");
     s.src = "https://checkout.razorpay.com/v1/checkout.js";
-    s.onload = () => resolve(true);
-    s.onerror = () => resolve(false);
+    s.onload = () => resolve(Boolean(window.Razorpay));
+    s.onerror = () => {
+      s.remove();
+      resolve(false);
+    };
     document.body.appendChild(s);
   });
 }
@@ -28,6 +73,9 @@ export default function PortalInvoices() {
   const [items, setItems] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<number | null>(null);
+  const [historyInvoice, setHistoryInvoice] = useState<number | null>(null);
+  const [paymentHistory, setPaymentHistory] = useState<Record<number, Payment[]>>({});
+  const [historyLoading, setHistoryLoading] = useState<number | null>(null);
 
   async function load() {
     try {
@@ -60,12 +108,39 @@ export default function PortalInvoices() {
     }
   }
 
+  async function togglePaymentHistory(inv: Invoice) {
+    if (historyInvoice === inv.id) {
+      setHistoryInvoice(null);
+      return;
+    }
+    if (paymentHistory[inv.id]) {
+      setHistoryInvoice(inv.id);
+      return;
+    }
+    setHistoryLoading(inv.id);
+    try {
+      const { data } = await api.get("/payments", { params: { invoice_id: inv.id } });
+      setPaymentHistory((history) => ({
+        ...history,
+        [inv.id]: Array.isArray(data) ? data : [],
+      }));
+      setHistoryInvoice(inv.id);
+    } catch (err) {
+      toast.error(errorMessage(err, "Could not load payment history"));
+    } finally {
+      setHistoryLoading(null);
+    }
+  }
+
   async function payNow(inv: Invoice) {
     setBusy(inv.id);
     try {
-      if (!(await loadRazorpay())) throw new Error("script");
+      if (!(await loadRazorpay())) {
+        throw new Error("Could not load Razorpay Checkout. Check your internet connection and try again.");
+      }
       const { data } = await api.post("/payments/razorpay/order", { invoice_id: inv.id });
-      const rzp = new (window as any).Razorpay({
+      if (!window.Razorpay) throw new Error("Razorpay Checkout did not load. Check your connection and try again.");
+      const rzp = new window.Razorpay({
         key: data.key_id,
         amount: data.amount,
         currency: data.currency ?? "INR",
@@ -74,7 +149,7 @@ export default function PortalInvoices() {
         description: `Invoice ${inv.number}`,
         prefill: { name: user?.name, email: user?.email },
         theme: { color: "#4f46e5" },
-        handler: async (resp: any) => {
+        handler: async (resp: RazorpayPaymentResponse) => {
           try {
             await api.post("/payments/razorpay/verify", {
               invoice_id: inv.id,
@@ -86,14 +161,22 @@ export default function PortalInvoices() {
             load();
           } catch (err) {
             toast.error(errorMessage(err, "Payment could not be verified"));
+          } finally {
+            setBusy(null);
           }
         },
+        modal: { ondismiss: () => setBusy(null) },
+      });
+      rzp.on("payment.failed", (response) => {
+        toast.error(response.error?.description ?? "Payment was not completed.");
+        setBusy(null);
       });
       rzp.open();
     } catch (err) {
-      toast.error(errorMessage(err, "Online payment is not available yet"));
-    } finally {
+      toast.error(errorMessage(err, "Online payment is not available"));
       setBusy(null);
+    } finally {
+      if (!window.Razorpay) setBusy(null);
     }
   }
 
@@ -126,6 +209,7 @@ export default function PortalInvoices() {
               <th className="px-5 py-3">Date</th>
               <th className="px-5 py-3">Due</th>
               <th className="px-5 py-3">Status</th>
+              <th className="px-5 py-3 text-right">Paid</th>
               <th className="px-5 py-3 text-right">Amount due</th>
               <th className="px-5 py-3 text-right">Actions</th>
             </tr>
@@ -133,7 +217,7 @@ export default function PortalInvoices() {
           <tbody className="divide-y divide-slate-100">
             {!loading && items.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-5 py-16 text-center">
+                <td colSpan={7} className="px-5 py-16 text-center">
                   <FileText className="mx-auto h-10 w-10 text-slate-300" />
                   <p className="mt-3 font-semibold text-slate-700">No invoices yet</p>
                 </td>
@@ -144,32 +228,65 @@ export default function PortalInvoices() {
               const isOver = inv.status === "confirmed" && !!inv.due_date && inv.due_date < todayStr() && due > 0;
               const canPay = inv.status === "confirmed" && due > 0;
               return (
-                <tr key={inv.id}>
-                  <td className="px-5 py-4 font-semibold text-slate-900">{inv.number}</td>
-                  <td className="px-5 py-4 text-slate-600">{fmt(inv.invoice_date)}</td>
-                  <td className={`px-5 py-4 ${isOver ? "font-semibold text-red-600" : "text-slate-600"}`}>{fmt(inv.due_date)}</td>
-                  <td className="px-5 py-4">
-                    <StatusBadge status={isOver ? "overdue" : inv.status} />
-                  </td>
-                  <td className="px-5 py-4 text-right font-semibold text-slate-900">{formatINR(due)}</td>
-                  <td className="px-5 py-4">
-                    <div className="flex justify-end gap-2">
-                      <button onClick={() => downloadPdf(inv)} disabled={busy !== null} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-indigo-600" title="Download PDF">
-                        <Download className="h-4 w-4" />
-                      </button>
-                      {canPay && (
-                        <button
-                          onClick={() => payNow(inv)}
-                          disabled={busy !== null}
-                          className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-60"
-                        >
-                          {busy === inv.id ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <CreditCard className="h-3.5 w-3.5" />}
-                          Pay now
+                <Fragment key={inv.id}>
+                  <tr key={inv.id}>
+                    <td className="px-5 py-4 font-semibold text-slate-900">{inv.number}</td>
+                    <td className="px-5 py-4 text-slate-600">{fmt(inv.invoice_date)}</td>
+                    <td className={`px-5 py-4 ${isOver ? "font-semibold text-red-600" : "text-slate-600"}`}>{fmt(inv.due_date)}</td>
+                    <td className="px-5 py-4">
+                      <StatusBadge status={isOver ? "overdue" : inv.status} />
+                    </td>
+                    <td className="px-5 py-4 text-right text-emerald-700">{formatINR(inv.amount_paid ?? 0)}</td>
+                    <td className="px-5 py-4 text-right font-semibold text-slate-900">{formatINR(due)}</td>
+                    <td className="px-5 py-4">
+                      <div className="flex justify-end gap-2">
+                        <button onClick={() => downloadPdf(inv)} disabled={busy !== null} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-indigo-600" title="Download PDF">
+                          <Download className="h-4 w-4" />
                         </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
+                        <button
+                          onClick={() => togglePaymentHistory(inv)}
+                          disabled={historyLoading !== null}
+                          className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-indigo-600 disabled:opacity-60"
+                          title="Payment history"
+                        >
+                          {historyLoading === inv.id ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <ReceiptText className="h-4 w-4" />}
+                        </button>
+                        {canPay && (
+                          <button
+                            onClick={() => payNow(inv)}
+                            disabled={busy !== null}
+                            className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-60"
+                          >
+                            {busy === inv.id ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <CreditCard className="h-3.5 w-3.5" />}
+                            Pay now
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                  {historyInvoice === inv.id && (
+                    <tr key={`${inv.id}-history`}>
+                      <td colSpan={7} className="bg-slate-50 px-5 py-4">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Payment history</p>
+                        {paymentHistory[inv.id]?.length ? (
+                          <div className="mt-2 divide-y divide-slate-200">
+                            {paymentHistory[inv.id].map((payment) => (
+                              <div key={payment.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
+                                <span className="text-slate-600">
+                                  {fmt(payment.payment_date)} · {payment.method.replace(/_/g, " ")}
+                                  {payment.note ? ` · ${payment.note}` : ""}
+                                </span>
+                                <span className="font-semibold text-emerald-700">{formatINR(payment.amount)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="mt-2 text-sm text-slate-500">No payments recorded for this invoice.</p>
+                        )}
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
               );
             })}
           </tbody>

@@ -23,6 +23,7 @@ python-multipart>=0.0.9
 
 # --- Environment variables ---
 python-dotenv>=1.0.0
+reportlab>=4.0.0                 # Invoice and analytics PDF generation
 
 # --- Testing ---
 pytest>=8.0.0

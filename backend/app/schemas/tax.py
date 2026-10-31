@@ -56,6 +56,13 @@ class TaxBase(BaseModel):
             raise ValueError("Tax name cannot be blank or whitespace-only.")
         return stripped
 
+    @field_validator("rate")
+    @classmethod
+    def validate_rate_precision(cls, v: Decimal) -> Decimal:
+        if v != v.quantize(Decimal("0.01")):
+            raise ValueError("Tax rate can have at most two decimal places.")
+        return v
+
 
 class TaxCreate(TaxBase):
     """Schema for creating a new Tax rule."""
@@ -100,6 +107,13 @@ class TaxUpdate(BaseModel):
             return stripped
         return v
 
+    @field_validator("rate")
+    @classmethod
+    def validate_rate_precision(cls, v: Optional[Decimal]) -> Optional[Decimal]:
+        if v is not None and v != v.quantize(Decimal("0.01")):
+            raise ValueError("Tax rate can have at most two decimal places.")
+        return v
+
 
 class TaxResponse(TaxBase):
     """Response schema returning stored tax details."""
@@ -129,12 +143,15 @@ class TaxCalculateRequest(BaseModel):
     """Request payload to calculate tax for a subtotal in paise."""
     subtotal_paise: int = Field(
         ...,
+        strict=True,
         ge=0,
         description="Transaction subtotal in integer paise (₹100 = 10000 paise)",
         examples=[10000],
     )
     tax_id: Optional[int] = Field(
         default=None,
+        strict=True,
+        ge=1,
         description="ID of an existing registered Tax rule",
     )
     tax_rate: Optional[Decimal] = Field(
@@ -146,8 +163,25 @@ class TaxCalculateRequest(BaseModel):
     customer_state: Optional[str] = Field(
         default=None,
         description="Billing state of the customer for Indian GST intra/inter-state split",
-        examples=["Karnataka", "Maharashtra"],
+        examples=["Kerala", "Maharashtra"],
     )
+
+    @field_validator("customer_state")
+    @classmethod
+    def validate_customer_state(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None:
+            stripped = v.strip()
+            if not stripped:
+                raise ValueError("Customer state cannot be blank or whitespace-only.")
+            return stripped
+        return v
+
+    @field_validator("tax_rate")
+    @classmethod
+    def validate_tax_rate_precision(cls, v: Optional[Decimal]) -> Optional[Decimal]:
+        if v is not None and v != v.quantize(Decimal("0.01")):
+            raise ValueError("Tax rate can have at most two decimal places.")
+        return v
 
 
 class TaxCalculateResponse(BaseModel):

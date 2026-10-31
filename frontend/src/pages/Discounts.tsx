@@ -20,7 +20,7 @@ type Discount = {
   used_count?: number;
   applies_to: "subscription" | "products";
   product_ids?: number[];
-  active?: boolean;
+  is_active: boolean;
 };
 type Product = { id: number; name: string };
 
@@ -36,12 +36,12 @@ const EMPTY = {
   usage_limit: "",
   applies_to: "subscription" as "subscription" | "products",
   product_ids: [] as number[],
-  active: true,
+  is_active: true,
 };
 
 function statusOf(d: Discount) {
   const t = today();
-  if (d.active === false) return { label: "Inactive", cls: "bg-slate-100 text-slate-500" };
+  if (!d.is_active) return { label: "Inactive", cls: "bg-slate-100 text-slate-500" };
   if (d.start_date && d.start_date > t) return { label: "Scheduled", cls: "bg-sky-50 text-sky-700" };
   if (d.end_date && d.end_date < t) return { label: "Expired", cls: "bg-slate-100 text-slate-500" };
   if (d.usage_limit && (d.used_count ?? 0) >= d.usage_limit) return { label: "Used up", cls: "bg-amber-50 text-amber-700" };
@@ -91,7 +91,7 @@ export default function Discounts() {
       usage_limit: d.usage_limit ? String(d.usage_limit) : "",
       applies_to: d.applies_to,
       product_ids: d.product_ids ?? [],
-      active: d.active !== false,
+      is_active: d.is_active,
     });
     setOpen(true);
   }
@@ -119,7 +119,7 @@ export default function Discounts() {
       usage_limit: form.usage_limit ? parseInt(form.usage_limit) : null,
       applies_to: form.applies_to,
       product_ids: form.applies_to === "products" ? form.product_ids : [],
-      active: form.active,
+      is_active: form.is_active,
     };
     setSaving(true);
     try {
@@ -140,7 +140,7 @@ export default function Discounts() {
     try {
       await api.delete(`/discounts/${d.id}`);
       toast.success("Discount deleted");
-      setItems((list) => list.filter((x) => x.id !== d.id));
+      setItems((list) => list.map((x) => (x.id === d.id ? { ...x, is_active: false } : x)));
     } catch (err) {
       toast.error(errorMessage(err, "Could not delete discount"));
     }
@@ -215,9 +215,11 @@ export default function Discounts() {
                       <button onClick={() => openEdit(d)} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-indigo-600">
                         <Pencil className="h-4 w-4" />
                       </button>
-                      <button onClick={() => handleDelete(d)} className="rounded-lg p-2 text-slate-400 hover:bg-red-50 hover:text-red-600">
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                      {d.is_active && (
+                        <button onClick={() => handleDelete(d)} className="rounded-lg p-2 text-slate-400 hover:bg-red-50 hover:text-red-600">
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -303,7 +305,7 @@ export default function Discounts() {
           </div>
 
           <label className="flex items-center gap-2 text-sm text-slate-700">
-            <input type="checkbox" checked={form.active} onChange={(e) => setForm({ ...form, active: e.target.checked })} className="h-4 w-4 accent-indigo-600" />
+            <input type="checkbox" checked={form.is_active} onChange={(e) => setForm({ ...form, is_active: e.target.checked })} className="h-4 w-4 accent-indigo-600" />
             Active
           </label>
 

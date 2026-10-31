@@ -7,6 +7,7 @@ import os
 import unittest
 from decimal import Decimal
 from fastapi import HTTPException
+from pydantic import ValidationError
 
 # Add backend directory to sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -76,7 +77,7 @@ class TestTaxRouterEndpoints(unittest.TestCase):
     def test_create_duplicate_tax_raises_400(self):
         """Creating a tax with an existing name must raise 400 Bad Request."""
         payload = TaxCreate(
-            name="GST 18%",
+            name="gst 18%",
             rate=Decimal("18.00"),
             tax_type=TaxType.GST,
         )
@@ -84,6 +85,25 @@ class TestTaxRouterEndpoints(unittest.TestCase):
             create_tax(tax_in=payload, db=self.db)
         self.assertEqual(cm.exception.status_code, 400)
         self.assertIn("already exists", cm.exception.detail)
+
+    def test_tax_inputs_reject_invalid_values(self):
+        """Tax rules and calculations reject blank labels and unsupported precision."""
+        with self.assertRaises(ValidationError):
+            TaxCreate(name="   ", rate=Decimal("18.00"))
+        with self.assertRaises(ValidationError):
+            TaxCreate(name="GST 12.345%", rate=Decimal("12.345"))
+        with self.assertRaises(ValidationError):
+            TaxCalculateRequest(
+                subtotal_paise=100,
+                tax_rate=Decimal("5.00"),
+                customer_state="   ",
+            )
+        with self.assertRaises(ValidationError):
+            TaxCalculateRequest(subtotal_paise=100.5, tax_rate=Decimal("5.00"))
+        with self.assertRaises(ValidationError):
+            TaxCalculateRequest(subtotal_paise=100, tax_rate=Decimal("5.001"))
+        with self.assertRaises(ValidationError):
+            TaxCalculateRequest(subtotal_paise=100, tax_id=1.5)
 
     def test_get_nonexistent_tax_raises_404(self):
         """Retrieving a non-existent tax ID must raise 404 Not Found."""
@@ -117,11 +137,11 @@ class TestTaxRouterEndpoints(unittest.TestCase):
         self.assertEqual(cm.exception.status_code, 400)
 
     def test_calculate_endpoint_intra_state_gst(self):
-        """Calculate endpoint with same state (Karnataka) divides tax into CGST & SGST."""
+        """Calculate endpoint with same state (Kerala) divides tax into CGST & SGST."""
         req = TaxCalculateRequest(
             subtotal_paise=50000,  # ₹500
             tax_rate=Decimal("18.00"),
-            customer_state="Karnataka",
+            customer_state="Kerala",
         )
         res = calculate_tax_endpoint(calc_in=req, db=self.db)
         self.assertEqual(res.subtotal_paise, 50000)
@@ -136,7 +156,7 @@ class TestTaxRouterEndpoints(unittest.TestCase):
         self.assertEqual(breakdown.igst_amount_paise, 0)
 
     def test_calculate_endpoint_inter_state_gst(self):
-        """Calculate endpoint with different state (Delhi vs Karnataka) applies full IGST."""
+        """Calculate endpoint with different state (Delhi vs Kerala) applies full IGST."""
         req = TaxCalculateRequest(
             subtotal_paise=50000,  # ₹500
             tax_rate=Decimal("18.00"),
@@ -172,6 +192,30 @@ class TestTaxRouterEndpoints(unittest.TestCase):
     def test_calculate_missing_id_and_rate_raises_400(self):
         """Calculate endpoint without tax_id or tax_rate raises 400 Bad Request."""
         req = TaxCalculateRequest(subtotal_paise=10000)
+        with self.assertRaises(HTTPException) as cm:
+            calculate_tax_endpoint(calc_in=req, db=self.db)
+        self.assertEqual(cm.exception.status_code, 400)
+
+    def test_calculate_rejects_inactive_tax(self):
+        """Deactivated tax rules cannot be applied to new calculations."""
+        tax = create_tax(
+            tax_in=TaxCreate(name="Inactive GST", rate=Decimal("5.00")),
+            db=self.db,
+        )
+        deactivate_tax(tax_id=tax.id, db=self.db)
+        req = TaxCalculateRequest(subtotal_paise=10000, tax_id=tax.id)
+        with self.assertRaises(HTTPException) as cm:
+            calculate_tax_endpoint(calc_in=req, db=self.db)
+        self.assertEqual(cm.exception.status_code, 400)
+
+    def test_calculate_rejects_multiple_rate_sources(self):
+        """A calculation must use either a saved tax or a custom rate, not both."""
+        tax = next(t for t in list_taxes(db=self.db) if t.name == "GST 18%")
+        req = TaxCalculateRequest(
+            subtotal_paise=10000,
+            tax_id=tax.id,
+            tax_rate=Decimal("5.00"),
+        )
         with self.assertRaises(HTTPException) as cm:
             calculate_tax_endpoint(calc_in=req, db=self.db)
         self.assertEqual(cm.exception.status_code, 400)
