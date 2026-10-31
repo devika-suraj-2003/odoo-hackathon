@@ -8,6 +8,7 @@ Responsibilities:
   - Expose a health-check endpoint at GET /.
 """
 
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -30,7 +31,24 @@ from app.routers import (
 # ---------------------------------------------------------------------------
 # Application instance
 # ---------------------------------------------------------------------------
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Initialize DB tables and seed standard tax data
+    from app.database import Base, engine, SessionLocal
+    from app.services.tax import seed_default_taxes
+    import app.models  # noqa: F401
+
+    Base.metadata.create_all(bind=engine)
+    db = SessionLocal()
+    try:
+        seed_default_taxes(db)
+    finally:
+        db.close()
+    yield
+
+
 app = FastAPI(
+    lifespan=lifespan,
     title="Brightloop Subscription Management System",
     description="Backend API for managing subscriptions, plans, billing and reporting.",
     version="0.1.0",

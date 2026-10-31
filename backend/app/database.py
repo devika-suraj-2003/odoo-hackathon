@@ -8,10 +8,11 @@ Database: SQLite (confirmed)
     it can be overridden per environment without changing code.
 """
 
+import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, DeclarativeBase
 
-DATABASE_URL = "sqlite:///./brightloop.db"
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./brightloop.db")
 
 engine = create_engine(
     DATABASE_URL,
