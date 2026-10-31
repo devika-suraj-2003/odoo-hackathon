@@ -7,6 +7,8 @@ import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
+import Products from "./pages/Products";
+import Plans from "./pages/Plans";
 
 function Home() {
   const { user } = useAuth();
@@ -33,8 +35,8 @@ export default function App() {
           </Route>
 
           <Route element={<ProtectedRoute roles={["admin"]} />}>
-            <Route path="/products" element={<Placeholder title="Products" />} />
-            <Route path="/plans" element={<Placeholder title="Plans" />} />
+            <Route path="/products" element={<Products />} />
+            <Route path="/plans" element={<Plans />} />
             <Route path="/templates" element={<Placeholder title="Quotation templates" />} />
             <Route path="/taxes" element={<Placeholder title="Taxes" />} />
             <Route path="/discounts" element={<Placeholder title="Discounts" />} />
