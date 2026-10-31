@@ -361,7 +361,7 @@ export default function InvoiceDetail() {
             <button type="button" onClick={() => setPayOpen(false)} className={btnSecondary}>
               Cancel
             </button>
-            <button type="submit" disabled={paying} className={`${btnPrimary} w-auto`}>
+            <button type="submit" disabled={paying} className={`${btnPrimary.replace("w-full", "")}`}>
               {paying && <LoaderCircle className="h-4 w-4 animate-spin" />}
               Save payment
             </button>
