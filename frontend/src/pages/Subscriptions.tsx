@@ -193,6 +193,13 @@ export default function Subscriptions() {
     if (!form.customer_id) return toast.error("Please choose a customer");
     if (!form.plan_id) return toast.error("Please choose a plan");
     if (lines.length === 0) return toast.error("Add at least one product line");
+    let taxId: number | null = null;
+    try {
+      const { data: tx } = await api.get("/taxes");
+      const all: any[] = Array.isArray(tx) ? tx : [];
+      const pick = all.find((t) => t.is_default) ?? all.find((t) => Number(t.rate) === 18) ?? null;
+      taxId = pick?.id ?? null;
+    } catch {}
     const body = {
       customer_id: Number(form.customer_id),
       plan_id: Number(form.plan_id),
@@ -204,6 +211,7 @@ export default function Subscriptions() {
         variant_id: l.variant_id ? Number(l.variant_id) : null,
         quantity: Math.max(1, parseInt(l.quantity) || 1),
         unit_price: toPaise(l.unit_price),
+        tax_id: taxId,
       })),
     };
     setSaving(true);
