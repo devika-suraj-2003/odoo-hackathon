@@ -19,6 +19,7 @@ import PortalInvoices from "./pages/PortalInvoices";
 import PortalProfile from "./pages/PortalProfile";
 import Dashboard from "./pages/Dashboard";
 import People from "./pages/People";
+import Taxes from "./pages/Taxes";
 
 function Home() {
   const { user } = useAuth();
@@ -50,7 +51,7 @@ export default function App() {
             <Route path="/products" element={<Products />} />
             <Route path="/plans" element={<Plans />} />
             <Route path="/templates" element={<Placeholder title="Quotation templates" />} />
-            <Route path="/taxes" element={<Placeholder title="Taxes" />} />
+            <Route path="/taxes" element={<Taxes />} />
             <Route path="/discounts" element={<Placeholder title="Discounts" />} />
             <Route path="/staff" element={<People role="staff" />} />
           </Route>
