@@ -4,6 +4,7 @@ schemas package — Pydantic v2 data validation schemas for Brightloop Subscript
 
 from app.schemas.user import (
     UserSignup,
+    CustomerCreate,
     UserResponse,
     StaffCreate,
 )
@@ -33,6 +34,7 @@ from app.schemas.settings import (
 
 __all__ = [
     "UserSignup",
+    "CustomerCreate",
     "UserResponse",
     "StaffCreate",
     "UserLogin",

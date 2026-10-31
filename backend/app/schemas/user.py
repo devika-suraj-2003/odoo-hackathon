@@ -74,6 +74,14 @@ class UserSignup(BaseModel):
         return validate_password_rules(v)
 
 
+class CustomerCreate(UserSignup):
+    """
+    Schema for administrator-driven customer creation (POST /api/users).
+    Explicitly forbids client-assigned roles; always assigned role='customer' on backend.
+    """
+    pass
+
+
 class StaffCreate(BaseModel):
     """
     Schema for administrator-driven staff member creation (POST /users/staff).
