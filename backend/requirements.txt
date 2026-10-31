@@ -1,0 +1,36 @@
+# ==============================================================================
+# Brightloop Subscription Management System — Backend Dependencies
+# ==============================================================================
+
+# --- Web framework & server ---
+fastapi>=0.111.0
+uvicorn[standard]>=0.29.0          # ASGI server with websocket + reload support
+
+# --- ORM & migrations ---
+sqlalchemy>=2.0.0                  # ORM (2.x style, sync)
+alembic>=1.13.0                    # Schema migration tool
+
+# --- Data validation ---
+pydantic>=2.0.0
+pydantic-settings>=2.0.0          # Settings management via .env files
+
+# --- Authentication (needed for upcoming auth module) ---
+python-jose[cryptography]>=3.3.0  # JWT encode / decode
+passlib[bcrypt]>=1.7.4             # Password hashing
+
+# --- File uploads (CSV import) ---
+python-multipart>=0.0.9
+
+# --- Environment variables ---
+python-dotenv>=1.0.0
+
+# --- Testing ---
+pytest>=8.0.0
+pytest-asyncio>=0.23.0
+httpx>=0.27.0                      # AsyncClient for testing FastAPI
+
+# ==============================================================================
+# DATABASE DRIVER
+# SQLite is confirmed. Python's built-in sqlite3 is used automatically by
+# SQLAlchemy — no extra package needs to be installed.
+# ==============================================================================
