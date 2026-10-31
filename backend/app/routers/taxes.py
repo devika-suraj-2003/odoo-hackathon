@@ -7,7 +7,7 @@ tax rules, and calculating exact taxes and Indian GST in integer paise.
 """
 
 from typing import Annotated, List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -21,7 +21,20 @@ from app.schemas.tax import (
 )
 from app.services import tax as tax_service
 
-router = APIRouter(tags=["Taxes"])
+from app.core.dependencies import get_current_user
+from app.models.user import User
+
+
+def _tax_access(request: Request, current_user: User = Depends(get_current_user)) -> User:
+    """Admin and staff can read taxes and calculate; only admin can create, update or deactivate."""
+    read_only = request.method == "GET" or request.url.path.rstrip("/").endswith("/calculate")
+    allowed = {"admin", "staff"} if read_only else {"admin"}
+    if current_user.role not in allowed:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have permission to manage taxes.")
+    return current_user
+
+
+router = APIRouter(tags=["Taxes"], dependencies=[Depends(_tax_access)])
 
 
 @router.post(

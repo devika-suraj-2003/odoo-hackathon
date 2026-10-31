@@ -1,6 +1,6 @@
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -13,7 +13,20 @@ from app.schemas.discount import (
 )
 from app.services import discount as discount_service
 
-router = APIRouter(tags=["Discounts"])
+from app.core.dependencies import get_current_user
+from app.models.user import User
+
+
+def _discount_access(request: Request, current_user: User = Depends(get_current_user)) -> User:
+    """Admin and staff can read and validate discounts; only admin can create, update or delete."""
+    read_only = request.method == "GET" or request.url.path.rstrip("/").endswith("/validate")
+    allowed = {"admin", "staff"} if read_only else {"admin"}
+    if current_user.role not in allowed:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only admins can manage discounts.")
+    return current_user
+
+
+router = APIRouter(tags=["Discounts"], dependencies=[Depends(_discount_access)])
 
 
 @router.post("", response_model=DiscountResponse, status_code=status.HTTP_201_CREATED)
