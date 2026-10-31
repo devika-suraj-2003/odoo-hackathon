@@ -10,6 +10,9 @@ import ResetPassword from "./pages/ResetPassword";
 import Products from "./pages/Products";
 import Plans from "./pages/Plans";
 import Subscriptions from "./pages/Subscriptions";
+import SubscriptionDetail from "./pages/SubscriptionDetail";
+import Invoices from "./pages/Invoices";
+import InvoiceDetail from "./pages/InvoiceDetail";
 
 function Home() {
   const { user } = useAuth();
@@ -31,8 +34,9 @@ export default function App() {
             <Route path="/dashboard" element={<Placeholder title="Dashboard" />} />
             <Route path="/customers" element={<Placeholder title="Customers" />} />
             <Route path="/subscriptions" element={<Subscriptions />} />
-            <Route path="/subscriptions/:id" element={<Placeholder title="Subscription detail" />} />
-            <Route path="/invoices" element={<Placeholder title="Invoices" />} />
+            <Route path="/subscriptions/:id" element={<SubscriptionDetail />} />
+            <Route path="/invoices" element={<Invoices />} />
+            <Route path="/invoices/:id" element={<InvoiceDetail />} />
             <Route path="/payments" element={<Placeholder title="Payments" />} />
           </Route>
 
