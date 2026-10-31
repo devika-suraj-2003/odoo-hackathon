@@ -1,25 +1,24 @@
-"""
-database.py — SQLAlchemy engine and session factory.
-
-Database: SQLite (confirmed)
-  - Driver: Python's built-in sqlite3 — no extra package required.
-  - File:   brightloop.db (created automatically in the backend/ directory).
-  - The DATABASE_URL is read from the DATABASE_URL environment variable so
-    it can be overridden per environment without changing code.
-"""
-
 import os
+from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, DeclarativeBase
 
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./brightloop.db")
+# Database configuration
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
-engine = create_engine(
-    DATABASE_URL,
-    connect_args={"check_same_thread": False},  # Required for SQLite + FastAPI
-    echo=False,  # Set True to log all SQL statements during development
+DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    f"sqlite:///{BASE_DIR / 'brightloop.db'}"
 )
 
+# SQLAlchemy engine
+engine = create_engine(
+    DATABASE_URL,
+    connect_args={"check_same_thread": False},
+    echo=False,
+)
+
+# Database session factory
 SessionLocal = sessionmaker(
     bind=engine,
     autocommit=False,
@@ -27,15 +26,12 @@ SessionLocal = sessionmaker(
 )
 
 
+# Shared base for all database models
 class Base(DeclarativeBase):
-    """Shared declarative base for all ORM models."""
     pass
 
 
-# ---------------------------------------------------------------------------
-# FastAPI dependency — yields a DB session and ensures it is closed afterward.
-# Import and use with:  db: Session = Depends(get_db)
-# ---------------------------------------------------------------------------
+# FastAPI database dependency
 def get_db():
     db = SessionLocal()
     try:

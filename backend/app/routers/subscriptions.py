@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-router = APIRouter()
+router = APIRouter(tags=["Subscriptions"])
 
 # TODO: Implement subscription lifecycle endpoints
 # GET    /subscriptions
@@ -11,3 +11,9 @@ router = APIRouter()
 # POST   /subscriptions/{id}/cancel
 # POST   /subscriptions/{id}/pause
 # POST   /subscriptions/{id}/resume
+
+
+@router.get("/", summary="Subscriptions status / placeholder")
+def get_subscriptions_status():
+    """Placeholder endpoint for the Subscriptions router."""
+    return {"status": "ok", "message": "Subscriptions router is registered"}

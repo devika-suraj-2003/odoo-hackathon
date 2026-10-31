@@ -1,22 +1,14 @@
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Navigate, Route, Routes } from "react-router-dom";
 import { useAuth, homeFor } from "./context/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Layout from "./components/Layout";
-import Login from "./pages/Login";
 import Placeholder from "./pages/Placeholder";
-
-const STAFF_PAGES = [
-  ["dashboard", "Dashboard"], ["customers", "Customers"], ["subscriptions", "Subscriptions"],
-  ["invoices", "Invoices"], ["payments", "Payments"],
-];
-const ADMIN_PAGES = [
-  ["products", "Products"], ["plans", "Plans"], ["templates", "Quotation Templates"],
-  ["taxes", "Taxes"], ["discounts", "Discounts"], ["staff", "Staff"],
-];
-const CUSTOMER_PAGES = [
-  ["portal/subscriptions", "My Subscriptions"], ["portal/invoices", "My Invoices"],
-  ["portal/profile", "Profile"],
-];
+import Login from "./pages/Login";
+import Signup from "./pages/Signup";
+import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
+import Products from "./pages/Products";
+import Plans from "./pages/Plans";
 
 function Home() {
   const { user } = useAuth();
@@ -27,25 +19,38 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/signup" element={<Signup />} />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
+      <Route path="/reset" element={<ResetPassword />} />
+
       <Route element={<ProtectedRoute />}>
         <Route element={<Layout />}>
           <Route element={<ProtectedRoute roles={["admin", "staff"]} />}>
-            {STAFF_PAGES.map(([path, title]) => (
-              <Route key={path} path={path} element={<Placeholder title={title} />} />
-            ))}
+            <Route path="/dashboard" element={<Placeholder title="Dashboard" />} />
+            <Route path="/customers" element={<Placeholder title="Customers" />} />
+            <Route path="/subscriptions" element={<Placeholder title="Subscriptions" />} />
+            <Route path="/invoices" element={<Placeholder title="Invoices" />} />
+            <Route path="/payments" element={<Placeholder title="Payments" />} />
           </Route>
+
           <Route element={<ProtectedRoute roles={["admin"]} />}>
-            {ADMIN_PAGES.map(([path, title]) => (
-              <Route key={path} path={path} element={<Placeholder title={title} />} />
-            ))}
+            <Route path="/products" element={<Products />} />
+            <Route path="/plans" element={<Plans />} />
+            <Route path="/templates" element={<Placeholder title="Quotation templates" />} />
+            <Route path="/taxes" element={<Placeholder title="Taxes" />} />
+            <Route path="/discounts" element={<Placeholder title="Discounts" />} />
+            <Route path="/staff" element={<Placeholder title="Staff" />} />
           </Route>
+
           <Route element={<ProtectedRoute roles={["customer"]} />}>
-            {CUSTOMER_PAGES.map(([path, title]) => (
-              <Route key={path} path={path} element={<Placeholder title={title} />} />
-            ))}
+            <Route path="/portal/subscriptions" element={<Placeholder title="My subscriptions" />} />
+            <Route path="/portal/invoices" element={<Placeholder title="My invoices" />} />
+            <Route path="/portal/profile" element={<Placeholder title="Profile" />} />
           </Route>
         </Route>
       </Route>
+
       <Route path="*" element={<Home />} />
     </Routes>
   );

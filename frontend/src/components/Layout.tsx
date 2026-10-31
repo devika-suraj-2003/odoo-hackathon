@@ -1,83 +1,117 @@
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import {
+  LayoutDashboard, Users, Repeat, FileText, CreditCard, Package, CalendarClock,
+  FileStack, Percent, BadgePercent, UserCog, UserRound, LogOut,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { useAuth, type Role } from "../context/AuthContext";
 
-const MENUS: Record<Role, { label: string; to: string }[]> = {
-  admin: [
-    { label: "Dashboard", to: "/dashboard" },
-    { label: "Customers", to: "/customers" },
-    { label: "Products", to: "/products" },
-    { label: "Plans", to: "/plans" },
-    { label: "Templates", to: "/templates" },
-    { label: "Subscriptions", to: "/subscriptions" },
-    { label: "Invoices", to: "/invoices" },
-    { label: "Payments", to: "/payments" },
-    { label: "Taxes", to: "/taxes" },
-    { label: "Discounts", to: "/discounts" },
-    { label: "Staff", to: "/staff" },
-  ],
-  staff: [
-    { label: "Dashboard", to: "/dashboard" },
-    { label: "Customers", to: "/customers" },
-    { label: "Subscriptions", to: "/subscriptions" },
-    { label: "Invoices", to: "/invoices" },
-    { label: "Payments", to: "/payments" },
-  ],
-  customer: [
-    { label: "My Subscriptions", to: "/portal/subscriptions" },
-    { label: "My Invoices", to: "/portal/invoices" },
-    { label: "Profile", to: "/portal/profile" },
-  ],
-};
+type Item = { to: string; label: string; icon: LucideIcon; roles: Role[] };
 
-const ROLE_BADGE: Record<Role, string> = {
-  admin: "bg-indigo-100 text-indigo-700",
-  staff: "bg-emerald-100 text-emerald-700",
-  customer: "bg-amber-100 text-amber-700",
+const items: Item[] = [
+  { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard, roles: ["admin", "staff"] },
+  { to: "/customers", label: "Customers", icon: Users, roles: ["admin", "staff"] },
+  { to: "/subscriptions", label: "Subscriptions", icon: Repeat, roles: ["admin", "staff"] },
+  { to: "/invoices", label: "Invoices", icon: FileText, roles: ["admin", "staff"] },
+  { to: "/payments", label: "Payments", icon: CreditCard, roles: ["admin", "staff"] },
+  { to: "/products", label: "Products", icon: Package, roles: ["admin"] },
+  { to: "/plans", label: "Plans", icon: CalendarClock, roles: ["admin"] },
+  { to: "/templates", label: "Quotation templates", icon: FileStack, roles: ["admin"] },
+  { to: "/taxes", label: "Taxes", icon: Percent, roles: ["admin"] },
+  { to: "/discounts", label: "Discounts", icon: BadgePercent, roles: ["admin"] },
+  { to: "/staff", label: "Staff", icon: UserCog, roles: ["admin"] },
+  { to: "/portal/subscriptions", label: "My subscriptions", icon: Repeat, roles: ["customer"] },
+  { to: "/portal/invoices", label: "My invoices", icon: FileText, roles: ["customer"] },
+  { to: "/portal/profile", label: "Profile", icon: UserRound, roles: ["customer"] },
+];
+
+const roleBadge: Record<Role, string> = {
+  admin: "bg-violet-100 text-violet-700",
+  staff: "bg-sky-100 text-sky-700",
+  customer: "bg-emerald-100 text-emerald-700",
 };
 
 export default function Layout() {
   const { user, logout } = useAuth();
+  const location = useLocation();
   const navigate = useNavigate();
   if (!user) return null;
 
+  const menu = items.filter((i) => i.roles.includes(user.role));
+  const current = menu.find((i) => location.pathname.startsWith(i.to));
+  const initials = user.name
+    .split(" ")
+    .map((w) => w[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+
+  function handleLogout() {
+    logout();
+    navigate("/login", { replace: true });
+  }
+
   return (
-    <div className="flex h-screen bg-slate-50 text-slate-800">
-      <aside className="w-60 shrink-0 bg-slate-900 text-slate-300 flex flex-col">
-        <div className="px-5 py-5 border-b border-slate-800">
-          <div className="text-white text-lg font-semibold">Brightloop</div>
-          <div className="text-xs text-slate-500">Subscription Manager</div>
+    <div className="min-h-screen">
+      <aside className="fixed inset-y-0 left-0 flex w-64 flex-col bg-slate-950 text-slate-300">
+        <div className="flex h-16 items-center gap-3 px-6">
+          <div className="grid h-9 w-9 place-items-center rounded-xl bg-linear-to-br from-indigo-500 to-violet-500 font-extrabold text-white">
+            B
+          </div>
+          <div>
+            <p className="text-sm font-bold text-white">Brightloop</p>
+            <p className="text-xs text-slate-500">Subscriptions</p>
+          </div>
         </div>
-        <nav className="flex-1 overflow-y-auto py-3">
-          {MENUS[user.role].map((item) => (
+
+        <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
+          {menu.map(({ to, label, icon: Icon }) => (
             <NavLink
-              key={item.to}
-              to={item.to}
+              key={to}
+              to={to}
               className={({ isActive }) =>
-                `block mx-3 my-0.5 px-3 py-2 rounded-lg text-sm transition ${
-                  isActive ? "bg-indigo-600 text-white" : "hover:bg-slate-800 hover:text-white"
+                `flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${
+                  isActive
+                    ? "bg-indigo-600 text-white shadow-lg shadow-indigo-900/40"
+                    : "text-slate-400 hover:bg-slate-800/70 hover:text-white"
                 }`
               }
             >
-              {item.label}
+              <Icon className="h-4 w-4" />
+              {label}
             </NavLink>
           ))}
         </nav>
-        <button
-          onClick={() => { logout(); navigate("/login"); }}
-          className="m-3 px-3 py-2 rounded-lg text-sm text-left hover:bg-slate-800 hover:text-white"
-        >
-          Log out
-        </button>
+
+        <div className="border-t border-slate-800 p-3">
+          <button
+            onClick={handleLogout}
+            className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-400 transition hover:bg-slate-800/70 hover:text-white"
+          >
+            <LogOut className="h-4 w-4" />
+            Log out
+          </button>
+        </div>
       </aside>
 
-      <div className="flex-1 flex flex-col min-w-0">
-        <header className="h-14 bg-white border-b border-slate-200 flex items-center justify-end gap-3 px-6">
-          <span className="text-sm font-medium">{user.name}</span>
-          <span className={`text-xs px-2 py-0.5 rounded-full capitalize ${ROLE_BADGE[user.role]}`}>
-            {user.role}
-          </span>
+      <div className="pl-64">
+        <header className="sticky top-0 z-10 flex h-16 items-center justify-between border-b border-slate-200 bg-white/80 px-8 backdrop-blur">
+          <h1 className="text-lg font-bold text-slate-900">{current?.label ?? "Brightloop"}</h1>
+          <div className="flex items-center gap-3">
+            <span className={`rounded-full px-2.5 py-1 text-xs font-semibold capitalize ${roleBadge[user.role]}`}>
+              {user.role}
+            </span>
+            <div className="text-right">
+              <p className="text-sm font-semibold text-slate-900">{user.name}</p>
+              <p className="text-xs text-slate-500">{user.email}</p>
+            </div>
+            <div className="grid h-9 w-9 place-items-center rounded-full bg-linear-to-br from-indigo-500 to-violet-500 text-sm font-bold text-white">
+              {initials}
+            </div>
+          </div>
         </header>
-        <main className="flex-1 overflow-y-auto p-6">
+
+        <main className="p-8">
           <Outlet />
         </main>
       </div>

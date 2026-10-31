@@ -21,7 +21,7 @@ from app.schemas.tax import (
 )
 from app.services import tax as tax_service
 
-router = APIRouter()
+router = APIRouter(tags=["Taxes"])
 
 
 @router.post(

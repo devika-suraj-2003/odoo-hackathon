@@ -5,12 +5,12 @@ Responsibilities:
   - Create and configure the FastAPI application instance.
   - Register CORS middleware (React dev server at http://localhost:5173).
   - Mount all domain routers under the /api prefix.
-  - Expose a health-check endpoint at GET /.
 """
 
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.utils import get_openapi
 
 from app.routers import (
     auth,
@@ -92,14 +92,34 @@ app.include_router(payments.router,      prefix="/api/payments",      tags=["Pay
 app.include_router(reports.router,       prefix="/api/reports",       tags=["Reports"])
 
 
-# ---------------------------------------------------------------------------
-# Health check
-# ---------------------------------------------------------------------------
-@app.get("/", tags=["Health"])
-def health_check():
-    """Returns a simple liveness signal. Useful for container health probes."""
+@app.get("/health", summary="Health Check", tags=["System"])
+def health_check() -> dict:
+    """Returns application health status."""
     return {
         "status": "ok",
         "service": "Brightloop Subscription Management System",
-        "version": "0.1.0",
     }
+
+
+# ---------------------------------------------------------------------------
+# OpenAPI schema customization
+# Deduplicate operation tags so Swagger UI renders cleanly.
+# ---------------------------------------------------------------------------
+def custom_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+    openapi_schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        description=app.description,
+        routes=app.routes,
+    )
+    for path_item in openapi_schema.get("paths", {}).values():
+        for operation in path_item.values():
+            if isinstance(operation, dict) and "tags" in operation:
+                operation["tags"] = list(dict.fromkeys(operation["tags"]))
+    app.openapi_schema = openapi_schema
+    return app.openapi_schema
+
+
+app.openapi = custom_openapi
