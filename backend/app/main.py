@@ -3,6 +3,8 @@ main.py — FastAPI application factory for the Brightloop Subscription Manageme
 
 Responsibilities:
   - Create and configure the FastAPI application instance.
+  - Automatically create database tables for all registered models on startup.
+  - Idempotently seed development accounts (admin, staff, customer) on startup.
   - Register CORS middleware (React dev server at http://localhost:5173).
   - Mount all domain routers under the /api prefix.
 """
@@ -11,6 +13,10 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
+
+from app.database import Base, engine
+import app.models  # Registers all 4 SQLAlchemy models on Base.metadata
+from app.core.seed import seed_dev_accounts
 
 from app.routers import (
     auth,
@@ -28,17 +34,23 @@ from app.routers import (
     reports,
 )
 
+
 # ---------------------------------------------------------------------------
-# Application instance
+# Lifespan Handler: Automatic table creation and dev account seeding
 # ---------------------------------------------------------------------------
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Initialize DB tables and seed standard tax data
-    from app.database import Base, engine, SessionLocal
-    from app.services.tax import seed_default_taxes
-    import app.models  # noqa: F401
-
+    """
+    Application lifespan context manager:
+      1. Ensures all four model tables (users, products, product_variants, plans)
+         are created in SQLite via Base.metadata.create_all.
+      2. Seeds initial development accounts (admin, staff, customer) idempotently.
+    """
     Base.metadata.create_all(bind=engine)
+    seed_dev_accounts()
+    from app.database import SessionLocal
+    from app.services.tax import seed_default_taxes
+
     db = SessionLocal()
     try:
         seed_default_taxes(db)

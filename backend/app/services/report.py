@@ -9,6 +9,7 @@ from app.models.invoice import Invoice
 from app.models.payment import Payment
 from app.models.plan import Plan
 from app.models.subscription import Subscription
+from app.services.clock import today as business_today
 
 
 MONTHLY_MULTIPLIERS = {
@@ -24,7 +25,7 @@ def _round_paise(value: Decimal | int) -> int:
 
 
 def monthly_revenue(db: Session, months: int = 12) -> list[dict]:
-    today = date.today()
+    today = business_today(db)
     month_keys = []
     current = today.year * 12 + today.month - 1
     for offset in range(months - 1, -1, -1):
@@ -56,6 +57,7 @@ def monthly_revenue(db: Session, months: int = 12) -> list[dict]:
 
 
 def report_summary(db: Session) -> dict:
+    today = business_today(db)
     active_rows = (
         db.query(Subscription.total, Plan.billing_period)
         .join(Plan, Plan.id == Subscription.plan_id)
@@ -80,7 +82,7 @@ def report_summary(db: Session) -> dict:
         .scalar()
         or 0
     )
-    overdue = unpaid.filter(Invoice.due_date < date.today())
+    overdue = unpaid.filter(Invoice.due_date < today)
     return {
         "active_subscriptions": len(active_rows),
         "mrr": mrr,
@@ -93,7 +95,7 @@ def report_summary(db: Session) -> dict:
             .filter(
                 Invoice.status == "confirmed",
                 Invoice.amount_due > 0,
-                Invoice.due_date < date.today(),
+                Invoice.due_date < today,
             )
             .scalar()
             or 0

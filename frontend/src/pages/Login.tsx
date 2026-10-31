@@ -2,13 +2,19 @@ import { useState, type FormEvent } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import { LoaderCircle, Eye, EyeOff } from "lucide-react";
-import api from "../api/client";
 import { errorMessage } from "../api/errors";
+import { loginRequest } from "../api/auth";
 import { useAuth, homeFor, type Role, type User } from "../context/AuthContext";
 import AuthShell from "../components/AuthShell";
 import { inputCls, labelCls, btnPrimary } from "../components/ui";
 
-const DEMO: Record<Role, User> = {
+const DEMO_LOGINS: Record<Role, { email: string; password: string }> = {
+  admin: { email: "admin@brightloop.com", password: "Admin@1234" },
+  staff: { email: "staff@brightloop.com", password: "Staff@1234" },
+  customer: { email: "customer@brightloop.com", password: "Customer@1234" },
+};
+
+const OFFLINE_USERS: Record<Role, User> = {
   admin: { id: 1, name: "Demo Admin", email: "admin@demo.com", role: "admin" },
   staff: { id: 2, name: "Demo Staff", email: "staff@demo.com", role: "staff" },
   customer: { id: 3, name: "Demo Customer", email: "customer@demo.com", role: "customer" },
@@ -24,14 +30,18 @@ export default function Login() {
 
   if (user) return <Navigate to={homeFor(user.role)} replace />;
 
+  async function doLogin(em: string, pw: string) {
+    const { token, user } = await loginRequest(em, pw);
+    login(token, user);
+    toast.success(`Welcome back, ${user.name}`);
+    navigate(homeFor(user.role), { replace: true });
+  }
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setLoading(true);
     try {
-      const { data } = await api.post("/auth/login", { email, password });
-      login(data.access_token, data.user);
-      toast.success(`Welcome back, ${data.user.name}`);
-      navigate(homeFor(data.user.role), { replace: true });
+      await doLogin(email, password);
     } catch (err) {
       toast.error(errorMessage(err, "Login failed"));
     } finally {
@@ -39,9 +49,21 @@ export default function Login() {
     }
   }
 
-  function demo(role: Role) {
-    login("demo", DEMO[role]);
-    navigate(homeFor(role), { replace: true });
+  async function demo(role: Role) {
+    setLoading(true);
+    try {
+      await doLogin(DEMO_LOGINS[role].email, DEMO_LOGINS[role].password);
+    } catch (err: any) {
+      if (!err?.response) {
+        login("demo", OFFLINE_USERS[role]);
+        toast("Backend offline, using demo mode", { icon: "⚠️" });
+        navigate(homeFor(role), { replace: true });
+      } else {
+        toast.error(errorMessage(err, "Demo login failed"));
+      }
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -49,14 +71,7 @@ export default function Login() {
       <form onSubmit={handleSubmit} className="space-y-5">
         <div>
           <label className={labelCls}>Email</label>
-          <input
-            type="email"
-            required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="you@company.com"
-            className={inputCls}
-          />
+          <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@company.com" className={inputCls} />
         </div>
 
         <div>
@@ -75,11 +90,7 @@ export default function Login() {
               placeholder="••••••••••"
               className={inputCls}
             />
-            <button
-              type="button"
-              onClick={() => setShow(!show)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-            >
+            <button type="button" onClick={() => setShow(!show)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
               {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             </button>
           </div>
@@ -102,7 +113,8 @@ export default function Login() {
           <button
             key={r}
             onClick={() => demo(r)}
-            className="rounded-xl border border-slate-200 bg-white py-2 text-xs font-semibold capitalize text-slate-600 transition hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700"
+            disabled={loading}
+            className="rounded-xl border border-slate-200 bg-white py-2 text-xs font-semibold capitalize text-slate-600 transition hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700 disabled:opacity-60"
           >
             {r}
           </button>

@@ -1,6 +1,7 @@
 from datetime import date
 import hashlib
 import hmac
+from types import SimpleNamespace
 
 import pytest
 from fastapi import FastAPI
@@ -10,6 +11,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.database import Base, get_db
+from app.core.dependencies import get_current_user
 from app.models.plan import Plan
 from app.models.product import Product
 from app.models.user import User
@@ -57,6 +59,10 @@ def client():
             yield db
 
     api.dependency_overrides[get_db] = override_get_db
+    api.dependency_overrides[get_current_user] = lambda: SimpleNamespace(
+        id=1,
+        role="admin",
+    )
     with TestClient(api) as test_client:
         yield test_client
     Base.metadata.drop_all(engine)
@@ -234,3 +240,28 @@ def test_razorpay_order_and_verification_api_are_test_mode_and_idempotent(client
     repeated = client.post("/api/payments/razorpay/verify", json=verification_payload)
     assert repeated.status_code == 400
     assert client.get(f"/api/invoices/{invoice['id']}").json()["status"] == "paid"
+
+
+def test_invoice_and_subscription_routes_enforce_customer_permissions(client):
+    invoice = client.post(
+        "/api/invoices",
+        json={
+            "customer_id": 1,
+            "lines": [{"description": "Owned by another customer", "quantity": 1, "unit_price": 1000}],
+        },
+    ).json()
+    client.app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(
+        id=2,
+        role="customer",
+    )
+
+    assert client.get(f"/api/invoices/{invoice['id']}").status_code == 403
+    assert client.post(
+        "/api/subscriptions",
+        json={
+            "customer_id": 1,
+            "plan_id": 1,
+            "start_date": date.today().isoformat(),
+            "lines": [{"product_id": 1, "quantity": 1, "unit_price": 10000}],
+        },
+    ).status_code == 403

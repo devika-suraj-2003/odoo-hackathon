@@ -5,7 +5,7 @@ from uuid import uuid4
 from sqlalchemy.orm import Session
 
 from app.models.discount import Discount
-from app.models.invoice import Invoice
+from app.models.invoice import Invoice, InvoiceLine
 from app.models.tax import Tax
 from app.models.user import User
 from app.schemas.invoice import InvoiceCreate
@@ -91,6 +91,22 @@ def _calculate_invoice_totals(
     return calculated_lines, subtotal, tax_total
 
 
+def _relational_lines(lines: list[dict]) -> list[InvoiceLine]:
+    return [
+        InvoiceLine(
+            product_id=line.get("product_id"),
+            tax_id=line.get("tax_id"),
+            description=line.get("description"),
+            qty=line.get("quantity", 1),
+            unit_price=line["unit_price"],
+            tax_amount=line.get("tax_amount", 0),
+            discount_amount=line.get("discount_amount", 0),
+            amount=line["amount"],
+        )
+        for line in lines
+    ]
+
+
 def create_invoice(db: Session, invoice_in: InvoiceCreate) -> Invoice:
     customer = db.query(User).filter(User.id == invoice_in.customer_id).first()
     if customer is None:
@@ -152,6 +168,7 @@ def create_invoice(db: Session, invoice_in: InvoiceCreate) -> Invoice:
         period_start=invoice_in.period_start,
         period_end=invoice_in.period_end,
         lines=calculated_lines,
+        line_items=_relational_lines(calculated_lines),
         subtotal=subtotal,
         discount_total=discount_total,
         discount_subtotal=discount_subtotal,
@@ -223,6 +240,7 @@ def confirm_invoice(db: Session, invoice: Invoice) -> Invoice:
                 discounted_product_ids,
             )
             invoice.lines = calculated_lines
+            invoice.line_items = _relational_lines(calculated_lines)
             invoice.subtotal = subtotal
             invoice.discount_total = discount_total
             invoice.discount_subtotal = discount_subtotal

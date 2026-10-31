@@ -4,6 +4,7 @@ import toast from "react-hot-toast";
 import { LoaderCircle } from "lucide-react";
 import api from "../api/client";
 import { errorMessage } from "../api/errors";
+import { loginRequest } from "../api/auth";
 import { useAuth, homeFor } from "../context/AuthContext";
 import AuthShell from "../components/AuthShell";
 import PasswordChecklist, { isStrongPassword } from "../components/PasswordChecklist";
@@ -33,10 +34,10 @@ export default function Signup() {
     setLoading(true);
     try {
       await api.post("/auth/signup", { name, email, password });
-      const { data } = await api.post("/auth/login", { email, password });
-      login(data.access_token, data.user);
+      const { token, user } = await loginRequest(email, password);
+      login(token, user);
       toast.success("Account created. Welcome!");
-      navigate(homeFor(data.user.role), { replace: true });
+      navigate(homeFor(user.role), { replace: true });
     } catch (err) {
       toast.error(errorMessage(err, "Signup failed"));
     } finally {
@@ -54,39 +55,18 @@ export default function Signup() {
 
         <div>
           <label className={labelCls}>Email</label>
-          <input
-            type="email"
-            required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="you@company.com"
-            className={inputCls}
-          />
+          <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@company.com" className={inputCls} />
         </div>
 
         <div>
           <label className={labelCls}>Password</label>
-          <input
-            type="password"
-            required
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="Create a strong password"
-            className={inputCls}
-          />
+          <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Create a strong password" className={inputCls} />
           <PasswordChecklist password={password} />
         </div>
 
         <div>
           <label className={labelCls}>Confirm password</label>
-          <input
-            type="password"
-            required
-            value={confirm}
-            onChange={(e) => setConfirm(e.target.value)}
-            placeholder="Type it again"
-            className={inputCls}
-          />
+          <input type="password" required value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder="Type it again" className={inputCls} />
           {mismatch && <p className="mt-1.5 text-xs text-red-600">Passwords do not match</p>}
         </div>
 
