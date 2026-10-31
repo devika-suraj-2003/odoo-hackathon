@@ -96,7 +96,7 @@ export default function Subscriptions() {
 
   async function loadLookups() {
     const [c, p, pl, t] = await Promise.allSettled([
-      api.get("/customers"),
+      api.get("/users", { params: { role: "customer" } }),
       api.get("/products"),
       api.get("/plans"),
       api.get("/templates"),

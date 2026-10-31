@@ -18,6 +18,7 @@ import PortalSubscriptions from "./pages/PortalSubscriptions";
 import PortalInvoices from "./pages/PortalInvoices";
 import PortalProfile from "./pages/PortalProfile";
 import Dashboard from "./pages/Dashboard";
+import People from "./pages/People";
 
 function Home() {
   const { user } = useAuth();
@@ -37,7 +38,7 @@ export default function App() {
         <Route element={<Layout />}>
           <Route element={<ProtectedRoute roles={["admin", "staff"]} />}>
             <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/customers" element={<Placeholder title="Customers" />} />
+            <Route path="/customers" element={<People role="customer" />} />
             <Route path="/subscriptions" element={<Subscriptions />} />
             <Route path="/subscriptions/:id" element={<SubscriptionDetail />} />
             <Route path="/invoices" element={<Invoices />} />
@@ -51,7 +52,7 @@ export default function App() {
             <Route path="/templates" element={<Placeholder title="Quotation templates" />} />
             <Route path="/taxes" element={<Placeholder title="Taxes" />} />
             <Route path="/discounts" element={<Placeholder title="Discounts" />} />
-            <Route path="/staff" element={<Placeholder title="Staff" />} />
+            <Route path="/staff" element={<People role="staff" />} />
           </Route>
 
           <Route element={<ProtectedRoute roles={["customer"]} />}>
