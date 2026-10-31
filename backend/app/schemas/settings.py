@@ -28,6 +28,7 @@ class TimeTravelResponse(BaseModel):
     simulated_today: date
     real_today: date
     days_advanced: int
+    invoices_generated: int = 0
 
 
 class TimeTravelResetResponse(BaseModel):

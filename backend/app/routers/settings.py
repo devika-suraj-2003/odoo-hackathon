@@ -6,6 +6,7 @@ from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+
 from app.database import get_db
 from app.models.user import User
 from app.core.dependencies import require_admin
@@ -15,6 +16,7 @@ from app.schemas.settings import (
     TimeTravelResetResponse,
 )
 from app.services import clock
+from app.services.billing import run_billing
 
 router = APIRouter(tags=["Settings"])
 
@@ -56,13 +58,26 @@ def time_travel(
     - Starting point is current today() (either existing simulated date or real date).
     """
     try:
-        new_simulated_date = clock.advance_time(days=request.days, db=db)
+        new_simulated_date = clock.advance_time(
+            days=request.days,
+            db=db,
+        )
+
+        invoices_generated = run_billing(
+            db,
+            new_simulated_date,
+        )
+
         return TimeTravelResponse(
             status="ok",
-            message=f"Time advanced by {request.days} day(s)",
+            message=(
+                f"Time advanced by {request.days} day(s). "
+                f"{invoices_generated} recurring invoice(s) generated."
+            ),
             simulated_today=new_simulated_date,
             real_today=date.today(),
             days_advanced=request.days,
+            invoices_generated=invoices_generated,
         )
     except ValueError as ve:
         raise HTTPException(
