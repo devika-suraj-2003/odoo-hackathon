@@ -42,6 +42,12 @@ function daysLate(d?: string | null) {
   return Math.max(0, Math.floor((Date.now() - new Date(d).getTime()) / 86400000));
 }
 
+function methodLabel(m?: string) {
+  if (!m) return "—";
+  if (m === "upi") return "UPI";
+  return m.replace(/_/g, " ");
+}
+
 function Stat({ label, value, sub, icon: Icon, tone }: { label: string; value: string; sub: string; icon: LucideIcon; tone: string }) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -76,6 +82,8 @@ export default function Payments() {
     })();
   }, []);
 
+  const invoiceOf = (id: number) => invoices.find((inv) => inv.id === id);
+
   const outstanding = useMemo(
     () => invoices.filter((inv) => inv.status === "confirmed" && (inv.amount_due ?? inv.total) > 0),
     [invoices]
@@ -86,9 +94,13 @@ export default function Payments() {
   const received = payments.reduce((s, p) => s + (p.amount ?? 0), 0);
 
   const q = query.trim().toLowerCase();
-  const shownPayments = payments.filter(
-    (p) => !q || p.invoice_number?.toLowerCase().includes(q) || p.customer?.name?.toLowerCase().includes(q) || p.method?.includes(q)
-  );
+  const shownPayments = payments.filter((p) => {
+    if (!q) return true;
+    const inv = invoiceOf(p.invoice_id);
+    const number = p.invoice_number ?? inv?.number ?? "";
+    const name = p.customer?.name ?? inv?.customer?.name ?? "";
+    return number.toLowerCase().includes(q) || name.toLowerCase().includes(q) || (p.method ?? "").includes(q);
+  });
   const shownInvoices = (tab === "overdue" ? overdue : outstanding).filter(
     (inv) => !q || inv.number?.toLowerCase().includes(q) || inv.customer?.name?.toLowerCase().includes(q)
   );
@@ -160,18 +172,21 @@ export default function Payments() {
                 </tr>
               )}
               {!loading &&
-                shownPayments.map((p) => (
-                  <tr key={p.id} onClick={() => navigate(`/invoices/${p.invoice_id}`)} className="cursor-pointer transition hover:bg-slate-50/70">
-                    <td className="px-5 py-4 text-slate-600">{formatDate(p.payment_date)}</td>
-                    <td className="px-5 py-4 font-semibold text-indigo-600">{p.invoice_number ?? `#${p.invoice_id}`}</td>
-                    <td className="px-5 py-4 font-medium text-slate-900">{p.customer?.name ?? "—"}</td>
-                    <td className="px-5 py-4">
-                      <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium capitalize text-slate-700">{p.method?.replace(/_/g, " ")}</span>
-                    </td>
-                    <td className="max-w-xs truncate px-5 py-4 text-slate-500">{p.note ?? "—"}</td>
-                    <td className="px-5 py-4 text-right font-semibold text-emerald-600">+{formatINR(p.amount)}</td>
-                  </tr>
-                ))}
+                shownPayments.map((p) => {
+                  const inv = invoiceOf(p.invoice_id);
+                  return (
+                    <tr key={p.id} onClick={() => navigate(`/invoices/${p.invoice_id}`)} className="cursor-pointer transition hover:bg-slate-50/70">
+                      <td className="px-5 py-4 text-slate-600">{formatDate(p.payment_date)}</td>
+                      <td className="px-5 py-4 font-semibold text-indigo-600">{p.invoice_number ?? inv?.number ?? `#${p.invoice_id}`}</td>
+                      <td className="px-5 py-4 font-medium text-slate-900">{p.customer?.name ?? inv?.customer?.name ?? "—"}</td>
+                      <td className="px-5 py-4">
+                        <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700">{methodLabel(p.method)}</span>
+                      </td>
+                      <td className="max-w-xs truncate px-5 py-4 text-slate-500">{p.note || "—"}</td>
+                      <td className="px-5 py-4 text-right font-semibold text-emerald-600">+{formatINR(p.amount)}</td>
+                    </tr>
+                  );
+                })}
             </tbody>
           </table>
         ) : (
