@@ -1,24 +1,24 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Area, AreaChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { Repeat, TrendingUp, Wallet, Clock, TriangleAlert, IndianRupee, Zap } from "lucide-react";
+import { Area, AreaChart, CartesianGrid, Cell, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Repeat, TrendingUp, Wallet, Clock, TriangleAlert, IndianRupee, Zap, ShieldAlert } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import api from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import StatusBadge from "../components/StatusBadge";
 import { formatINR } from "../lib/money";
 
-type Sub = { id: number; number: string; status: string; total?: number; customer?: { name: string } | null; plan?: { name: string; billing_period: string } | null; next_billing_date?: string | null };
-type Invoice = { id: number; number: string; status: string; due_date?: string | null; total: number; amount_due?: number; customer?: { name: string } | null };
+type Sub = { id: number; number: string; status: string; total?: number; customer?: { id?: number; name: string } | null; plan?: { name: string; billing_period: string } | null; next_billing_date?: string | null };
+type Invoice = { id: number; number: string; status: string; due_date?: string | null; total: number; amount_due?: number; customer?: { id?: number; name: string } | null };
 type Payment = { id: number; amount: number; payment_date?: string | null };
 type Summary = Partial<{ active_subscriptions: number; mrr: number; arr: number; revenue: number; outstanding: number; overdue_amount: number; overdue_count: number }>;
 
 const todayStr = () => new Date().toISOString().slice(0, 10);
 const arr = (r: PromiseSettledResult<any>) => (r.status === "fulfilled" && Array.isArray(r.value.data) ? r.value.data : []);
 const MONTHLY: Record<string, number> = { daily: 30, weekly: 4.33, monthly: 1, yearly: 1 / 12 };
-const STATUS_COLORS: Record<string, string> = {
-  draft: "#94a3b8", quotation: "#f59e0b", confirmed: "#0ea5e9", active: "#10b981", paused: "#8b5cf6", closed: "#cbd5e1",
-};
+const STATUS_COLORS: Record<string, string> = { draft: "#94a3b8", quotation: "#f59e0b", confirmed: "#0ea5e9", active: "#10b981", paused: "#8b5cf6", closed: "#cbd5e1" };
+const rupeeTick = (v: number) => `₹${v >= 1000 ? `${Math.round(v / 1000)}k` : v}`;
+const monthlyOf = (s: Sub) => (s.total ?? 0) * (MONTHLY[s.plan?.billing_period ?? "monthly"] ?? 1);
 
 function Card({ label, value, sub, icon: Icon, tone }: { label: string; value: string; sub?: string; icon: LucideIcon; tone: string }) {
   return (
@@ -52,21 +52,20 @@ export default function Dashboard() {
       setSubs(arr(s));
       setInvoices(arr(i));
       setPayments(arr(p));
-      setSummary(r.status === "fulfilled" && r.value.data && typeof r.value.data === "object" ? r.value.data : {});
+      setSummary(r.status === "fulfilled" && r.value.data && typeof r.value.data === "object" && !Array.isArray(r.value.data) ? r.value.data : {});
       setMs(Math.round(performance.now() - t0));
       setLoading(false);
     })();
   }, []);
 
   const active = subs.filter((s) => s.status === "active");
-  const computedMrr = active.reduce((sum, s) => sum + (s.total ?? 0) * (MONTHLY[s.plan?.billing_period ?? "monthly"] ?? 1), 0);
-  const mrr = summary.mrr ?? Math.round(computedMrr);
-  const arrValue = summary.arr ?? mrr * 12;
-  const revenue = summary.revenue ?? payments.reduce((s, p) => s + (p.amount ?? 0), 0);
+  const mrr = typeof summary.mrr === "number" ? summary.mrr : Math.round(active.reduce((sum, s) => sum + monthlyOf(s), 0));
+  const arrValue = typeof summary.arr === "number" ? summary.arr : mrr * 12;
+  const revenue = typeof summary.revenue === "number" ? summary.revenue : payments.reduce((s, p) => s + (p.amount ?? 0), 0);
   const unpaid = invoices.filter((i) => i.status === "confirmed" && (i.amount_due ?? i.total) > 0);
   const overdueList = unpaid.filter((i) => !!i.due_date && i.due_date < todayStr());
-  const outstanding = summary.outstanding ?? unpaid.reduce((s, i) => s + (i.amount_due ?? i.total), 0);
-  const overdueAmount = summary.overdue_amount ?? overdueList.reduce((s, i) => s + (i.amount_due ?? i.total), 0);
+  const outstanding = typeof summary.outstanding === "number" ? summary.outstanding : unpaid.reduce((s, i) => s + (i.amount_due ?? i.total), 0);
+  const overdueAmount = typeof summary.overdue_amount === "number" ? summary.overdue_amount : overdueList.reduce((s, i) => s + (i.amount_due ?? i.total), 0);
 
   const revenueByMonth = useMemo(() => {
     const months: { key: string; label: string; revenue: number }[] = [];
@@ -76,12 +75,42 @@ export default function Dashboard() {
       months.push({ key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`, label: d.toLocaleDateString("en-IN", { month: "short" }), revenue: 0 });
     }
     for (const p of payments) {
-      const key = (p.payment_date ?? "").slice(0, 7);
-      const m = months.find((x) => x.key === key);
+      const m = months.find((x) => x.key === (p.payment_date ?? "").slice(0, 7));
       if (m) m.revenue += (p.amount ?? 0) / 100;
     }
     return months;
   }, [payments]);
+
+  const forecast = useMemo(() => {
+    const pipeline = subs.filter((s) => s.status === "confirmed").reduce((a, s) => a + monthlyOf(s), 0) + 0.5 * subs.filter((s) => s.status === "quotation").reduce((a, s) => a + monthlyOf(s), 0);
+    const closed = subs.filter((s) => s.status === "closed").length;
+    const churn = subs.length ? Math.min(0.05, closed / subs.length / 6) : 0.02;
+    const now = new Date();
+    const points = [];
+    for (let k = 0; k <= 6; k++) {
+      const d = new Date(now.getFullYear(), now.getMonth() + k, 1);
+      const value = k === 0 ? mrr : (mrr + pipeline) * Math.pow(1 - churn, k);
+      points.push({ label: d.toLocaleDateString("en-IN", { month: "short" }), mrr: Math.round(value) / 100 });
+    }
+    return { points, pipeline: Math.round(pipeline), churn };
+  }, [subs, mrr]);
+
+  const atRisk = useMemo(() => {
+    const map = new Map<string, { name: string; count: number; amount: number; maxDays: number }>();
+    for (const inv of overdueList) {
+      const name = inv.customer?.name ?? "Unknown";
+      const days = inv.due_date ? Math.floor((Date.now() - new Date(inv.due_date).getTime()) / 86400000) : 0;
+      const cur = map.get(name) ?? { name, count: 0, amount: 0, maxDays: 0 };
+      cur.count += 1;
+      cur.amount += inv.amount_due ?? inv.total;
+      cur.maxDays = Math.max(cur.maxDays, days);
+      map.set(name, cur);
+    }
+    return [...map.values()]
+      .map((c) => ({ ...c, level: c.count >= 2 || c.maxDays > 30 ? "high" : "medium" }))
+      .sort((a, b) => b.amount - a.amount)
+      .slice(0, 5);
+  }, [overdueList]);
 
   const byStatus = useMemo(() => {
     const c: Record<string, number> = {};
@@ -89,10 +118,7 @@ export default function Dashboard() {
     return Object.entries(c).map(([name, value]) => ({ name, value }));
   }, [subs]);
 
-  const upcoming = [...active]
-    .filter((s) => s.next_billing_date)
-    .sort((a, b) => (a.next_billing_date! < b.next_billing_date! ? -1 : 1))
-    .slice(0, 5);
+  const upcoming = [...active].filter((s) => s.next_billing_date).sort((a, b) => (a.next_billing_date! < b.next_billing_date! ? -1 : 1)).slice(0, 5);
 
   return (
     <div className="space-y-6">
@@ -131,7 +157,7 @@ export default function Dashboard() {
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                 <XAxis dataKey="label" tick={{ fontSize: 12, fill: "#64748b" }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 12, fill: "#64748b" }} axisLine={false} tickLine={false} tickFormatter={(v) => `₹${v >= 1000 ? `${Math.round(v / 1000)}k` : v}`} />
+                <YAxis tick={{ fontSize: 12, fill: "#64748b" }} axisLine={false} tickLine={false} tickFormatter={rupeeTick} />
                 <Tooltip formatter={(v: any) => [`₹${Number(v).toLocaleString("en-IN")}`, "Revenue"]} />
                 <Area type="monotone" dataKey="revenue" stroke="#6366f1" strokeWidth={2.5} fill="url(#rev)" />
               </AreaChart>
@@ -166,6 +192,60 @@ export default function Dashboard() {
                 ))}
               </div>
             </>
+          )}
+        </div>
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-3">
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm lg:col-span-2">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <h3 className="font-bold text-slate-900">MRR forecast, next 6 months</h3>
+              <p className="text-xs text-slate-500">
+                Current MRR + pipeline ({formatINR(forecast.pipeline)} from confirmed and 50% of quotations) − {(forecast.churn * 100).toFixed(1)}% monthly churn
+              </p>
+            </div>
+            <span className="rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-700">Projection</span>
+          </div>
+          <div className="mt-4 h-56">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={forecast.points}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                <XAxis dataKey="label" tick={{ fontSize: 12, fill: "#64748b" }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 12, fill: "#64748b" }} axisLine={false} tickLine={false} tickFormatter={rupeeTick} />
+                <Tooltip formatter={(v: any) => [`₹${Number(v).toLocaleString("en-IN")}`, "MRR"]} />
+                <Line type="monotone" dataKey="mrr" stroke="#8b5cf6" strokeWidth={2.5} strokeDasharray="6 4" dot={{ r: 4, fill: "#8b5cf6" }} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <h3 className="flex items-center gap-2 font-bold text-slate-900">
+            <ShieldAlert className="h-4 w-4 text-red-500" /> Customers at risk
+          </h3>
+          <p className="text-xs text-slate-500">Based on overdue invoices</p>
+          {atRisk.length === 0 ? (
+            <p className="mt-6 text-center text-sm text-slate-500">No customers at risk. 🎉</p>
+          ) : (
+            <div className="mt-3 divide-y divide-slate-100">
+              {atRisk.map((c) => (
+                <div key={c.name} className="flex items-center justify-between py-3 text-sm">
+                  <div>
+                    <p className="font-semibold text-slate-900">{c.name}</p>
+                    <p className="text-xs text-slate-500">
+                      {c.count} overdue · {c.maxDays} days late
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${c.level === "high" ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-700"}`}>
+                      {c.level === "high" ? "🔴 High" : "🟡 Medium"}
+                    </span>
+                    <p className="mt-1 text-xs font-semibold text-slate-700">{formatINR(c.amount)}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
         </div>
       </div>
