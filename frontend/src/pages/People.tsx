@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import toast from "react-hot-toast";
-import { Plus, Search, Users, UserCog, LoaderCircle, MapPin, Phone } from "lucide-react";
+import { Plus, Search, Users, UserCog, LoaderCircle, MapPin, Phone, Pencil, Trash2 } from "lucide-react";
 import api from "../api/client";
 import { errorMessage } from "../api/errors";
 import Modal from "../components/Modal";
 import PasswordChecklist, { isStrongPassword } from "../components/PasswordChecklist";
 import { inputCls, labelCls, btnPrimary, btnSecondary } from "../components/ui";
+import { useAuth } from "../context/AuthContext";
 
 type Person = { id: number; name: string; email: string; role: string; phone?: string | null; state?: string | null; created_at?: string | null };
 
@@ -18,12 +19,21 @@ const EMPTY = { name: "", email: "", phone: "", state: "Kerala", password: "" };
 
 export default function People({ role }: { role: "customer" | "staff" }) {
   const isCustomer = role === "customer";
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
+
   const [items, setItems] = useState<Person[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(EMPTY);
   const [saving, setSaving] = useState(false);
+
+  // Edit modal state
+  const [editOpen, setEditOpen] = useState(false);
+  const [editing, setEditing] = useState<Person | null>(null);
+  const [editForm, setEditForm] = useState(EMPTY);
+  const [updating, setUpdating] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -73,7 +83,63 @@ export default function People({ role }: { role: "customer" | "staff" }) {
     }
   }
 
+  function openEdit(p: Person) {
+    setEditing(p);
+    setEditForm({
+      name: p.name,
+      email: p.email,
+      phone: p.phone || "",
+      state: p.state || "Kerala",
+      password: "",
+    });
+    setEditOpen(true);
+  }
+
+  async function handleUpdate(e: FormEvent) {
+    e.preventDefault();
+    if (!editing) return;
+    if (editForm.password && !isStrongPassword(editForm.password)) {
+      return toast.error("Password does not meet all the rules");
+    }
+    setUpdating(true);
+    try {
+      const payload: Record<string, any> = {
+        name: editForm.name.trim(),
+        email: editForm.email.trim(),
+        phone: editForm.phone.trim() || null,
+        state: isCustomer ? editForm.state : null,
+      };
+      if (editForm.password) {
+        payload.password = editForm.password;
+      }
+      await api.put(`/users/${editing.id}`, payload);
+      toast.success(`${isCustomer ? "Customer" : "Staff member"} updated`);
+      setEditOpen(false);
+      setEditing(null);
+      load();
+    } catch (err) {
+      toast.error(errorMessage(err, "Could not update user"));
+    } finally {
+      setUpdating(false);
+    }
+  }
+
+  async function handleDelete(p: Person) {
+    const roleLabel = isCustomer ? "customer" : "staff member";
+    if (!confirm(`Are you sure you want to delete ${roleLabel} "${p.name}"? This action cannot be undone.`)) {
+      return;
+    }
+    try {
+      await api.delete(`/users/${p.id}`);
+      toast.success(`${isCustomer ? "Customer" : "Staff member"} deleted`);
+      setItems((list) => list.filter((item) => item.id !== p.id));
+    } catch (err) {
+      toast.error(errorMessage(err, `Could not delete ${roleLabel}`));
+    }
+  }
+
   const Icon = isCustomer ? Users : UserCog;
+  const colSpanCount = (isCustomer ? 5 : 4) + (isAdmin ? 1 : 0);
 
   return (
     <div className="space-y-6">
@@ -107,13 +173,14 @@ export default function People({ role }: { role: "customer" | "staff" }) {
               {isCustomer && <th className="px-5 py-3">State</th>}
               {isCustomer && <th className="px-5 py-3">GST type</th>}
               <th className="px-5 py-3">Joined</th>
+              {isAdmin && <th className="px-5 py-3 text-right">Actions</th>}
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {loading &&
               [1, 2, 3].map((i) => (
                 <tr key={i}>
-                  <td colSpan={5} className="px-5 py-4">
+                  <td colSpan={colSpanCount} className="px-5 py-4">
                     <div className="h-4 w-full animate-pulse rounded bg-slate-100" />
                   </td>
                 </tr>
@@ -121,7 +188,7 @@ export default function People({ role }: { role: "customer" | "staff" }) {
 
             {!loading && filtered.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-5 py-16 text-center">
+                <td colSpan={colSpanCount} className="px-5 py-16 text-center">
                   <Icon className="mx-auto h-10 w-10 text-slate-300" />
                   <p className="mt-3 font-semibold text-slate-700">{isCustomer ? "No customers yet" : "No staff yet"}</p>
                   <p className="text-sm text-slate-500">{isCustomer ? "Customers can sign up themselves, or you can add them here." : "Only admins can add staff members."}</p>
@@ -180,6 +247,26 @@ export default function People({ role }: { role: "customer" | "staff" }) {
                     <td className="px-5 py-4 text-slate-600">
                       {p.created_at ? new Date(p.created_at).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—"}
                     </td>
+                    {isAdmin && (
+                      <td className="px-5 py-4">
+                        <div className="flex justify-end gap-1">
+                          <button
+                            onClick={() => openEdit(p)}
+                            title={`Edit ${isCustomer ? "customer" : "staff"}`}
+                            className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-indigo-600"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(p)}
+                            title={`Delete ${isCustomer ? "customer" : "staff"}`}
+                            className="rounded-lg p-2 text-slate-400 hover:bg-red-50 hover:text-red-600"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 );
               })}
@@ -187,6 +274,7 @@ export default function People({ role }: { role: "customer" | "staff" }) {
         </table>
       </div>
 
+      {/* Create Modal */}
       <Modal open={open} title={isCustomer ? "New customer" : "Add staff member"} onClose={() => setOpen(false)}>
         <form onSubmit={handleSave} className="space-y-4">
           <div>
@@ -225,6 +313,56 @@ export default function People({ role }: { role: "customer" | "staff" }) {
             <button type="submit" disabled={saving} className={btnPrimary.replace("w-full", "")}>
               {saving && <LoaderCircle className="h-4 w-4 animate-spin" />}
               Save
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Edit Modal (Admin only) */}
+      <Modal open={editOpen} title={isCustomer ? "Edit customer" : "Edit staff member"} onClose={() => setEditOpen(false)}>
+        <form onSubmit={handleUpdate} className="space-y-4">
+          <div>
+            <label className={labelCls}>Full name</label>
+            <input required value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} className={inputCls} />
+          </div>
+          <div>
+            <label className={labelCls}>Email</label>
+            <input required type="email" value={editForm.email} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} className={inputCls} />
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label className={labelCls}>Phone</label>
+              <input value={editForm.phone} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} placeholder="Optional" className={inputCls} />
+            </div>
+            {isCustomer && (
+              <div>
+                <label className={labelCls}>State (for GST)</label>
+                <select value={editForm.state} onChange={(e) => setEditForm({ ...editForm, state: e.target.value })} className={inputCls}>
+                  {STATES.map((s) => (
+                    <option key={s}>{s}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
+          <div>
+            <label className={labelCls}>New password (optional)</label>
+            <input
+              type="text"
+              value={editForm.password}
+              onChange={(e) => setEditForm({ ...editForm, password: e.target.value })}
+              placeholder="Leave blank to keep current password"
+              className={inputCls}
+            />
+            {editForm.password && <PasswordChecklist password={editForm.password} />}
+          </div>
+          <div className="flex justify-end gap-2 border-t border-slate-200 pt-4">
+            <button type="button" onClick={() => setEditOpen(false)} className={btnSecondary}>
+              Cancel
+            </button>
+            <button type="submit" disabled={updating} className={btnPrimary.replace("w-full", "")}>
+              {updating && <LoaderCircle className="h-4 w-4 animate-spin" />}
+              Update
             </button>
           </div>
         </form>

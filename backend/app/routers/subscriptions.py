@@ -100,7 +100,10 @@ def update_subscription(
     subscription = _get_or_404(db, subscription_id)
     try:
         subscription = subscription_service.update_subscription(
-            db, subscription, subscription_in
+            db,
+            subscription,
+            subscription_in,
+            is_admin=(current_user.role == "admin"),
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -126,3 +129,19 @@ def update_subscription_status(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return subscription_service.subscription_response(db, subscription)
+
+
+@router.delete("/{subscription_id}")
+def delete_subscription(
+    subscription_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admin can delete subscriptions.",
+        )
+    subscription = _get_or_404(db, subscription_id)
+    subscription_service.delete_subscription(db, subscription)
+    return {"detail": "Subscription deleted successfully", "id": subscription_id}

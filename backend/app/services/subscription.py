@@ -163,8 +163,9 @@ def update_subscription(
     db: Session,
     subscription: Subscription,
     subscription_in: SubscriptionCreate,
+    is_admin: bool = False,
 ) -> Subscription:
-    if subscription.status not in {"draft", "quotation"}:
+    if not is_admin and subscription.status not in {"draft", "quotation"}:
         raise ValueError("Subscription cannot be edited.")
 
     customer = db.query(User).filter(User.id == subscription_in.customer_id).first()
@@ -477,3 +478,29 @@ def subscription_response(db: Session, subscription: Subscription) -> dict:
         "total": subscription.total,
         "history": subscription.history,
     }
+
+
+def delete_subscription(db: Session, subscription: Subscription) -> None:
+    """
+    Permanently delete a subscription and all associated child entities
+    (invoices, payments, order lines, history entries).
+    """
+    from app.models.invoice import Invoice, InvoiceLine
+    from app.models.payment import Payment
+    from app.models.razorpay_order import RazorpayOrder
+
+    # 1. Associated invoices
+    invoices = db.query(Invoice).filter(Invoice.subscription_id == subscription.id).all()
+    for inv in invoices:
+        db.query(RazorpayOrder).filter(RazorpayOrder.invoice_id == inv.id).delete()
+        db.query(Payment).filter(Payment.invoice_id == inv.id).delete()
+        db.query(InvoiceLine).filter(InvoiceLine.invoice_id == inv.id).delete()
+        db.delete(inv)
+
+    # 2. Lines and history
+    db.query(SubscriptionLine).filter(SubscriptionLine.subscription_id == subscription.id).delete()
+    db.query(SubscriptionHistory).filter(SubscriptionHistory.subscription_id == subscription.id).delete()
+
+    # 3. Subscription
+    db.delete(subscription)
+    db.commit()

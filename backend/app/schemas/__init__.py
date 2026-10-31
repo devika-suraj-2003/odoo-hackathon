@@ -18,6 +18,7 @@ from app.schemas.user import (
     CustomerCreate,
     UserResponse,
     StaffCreate,
+    UserUpdate,
 )
 from app.schemas.auth import (
     UserLogin,
@@ -73,6 +74,7 @@ __all__ = [
     "CustomerCreate",
     "UserResponse",
     "StaffCreate",
+    "UserUpdate",
     "UserLogin",
     "Token",
     "PasswordResetRequest",
@@ -105,3 +107,4 @@ __all__ = [
     "CustomerImportSummary",
     "FailedRow",
 ]
+

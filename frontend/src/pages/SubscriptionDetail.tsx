@@ -1,14 +1,32 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import toast from "react-hot-toast";
-import { ArrowLeft, Send, CircleCheck, Play, Pause, RotateCcw, CircleX, LoaderCircle, Check, History, FileText } from "lucide-react";
+import {
+  ArrowLeft,
+  Send,
+  CircleCheck,
+  Play,
+  Pause,
+  RotateCcw,
+  CircleX,
+  LoaderCircle,
+  Check,
+  History,
+  FileText,
+  Pencil,
+  Trash2,
+  X,
+} from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import api from "../api/client";
 import { errorMessage } from "../api/errors";
 import StatusBadge from "../components/StatusBadge";
-import { formatINR } from "../lib/money";
+import Modal from "../components/Modal";
+import { inputCls, labelCls, btnPrimary, btnSecondary } from "../components/ui";
+import { formatINR, toPaise, toRupees } from "../lib/money";
+import { useAuth } from "../context/AuthContext";
 
-type Line = { id: number; product_name: string; quantity: number; unit_price: number; tax_amount?: number; amount: number };
+type Line = { id: number; product_id?: number; product_name: string; quantity: number; unit_price: number; tax_amount?: number; amount: number; variant_id?: number | null };
 type HistoryItem = { at: string; from_status?: string | null; to_status: string; note?: string | null };
 type Sub = {
   id: number;
@@ -58,6 +76,13 @@ const BTN: Record<Action["style"], string> = {
   danger: "bg-white text-red-600 ring-1 ring-red-200 hover:bg-red-50",
 };
 
+const TERMS = [
+  { value: "immediate", label: "Immediate payment" },
+  { value: "15_days", label: "15 days" },
+  { value: "30_days", label: "30 days" },
+  { value: "end_of_month", label: "End of month" },
+];
+
 function formatDate(d?: string | null) {
   if (!d) return "—";
   return new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
@@ -75,13 +100,35 @@ function formatTerms(t?: number | string | null) {
   return n === 0 ? "Immediate" : `${n} days`;
 }
 
+type LineForm = { product_id: string; variant_id: string; quantity: string; unit_price: string };
+
 export default function SubscriptionDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
+
   const [sub, setSub] = useState<Sub | null>(null);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
+
+  // Edit modal state
+  const [editOpen, setEditOpen] = useState(false);
+  const [editSaving, setEditSaving] = useState(false);
+  const [plans, setPlans] = useState<any[]>([]);
+  const [products, setProducts] = useState<any[]>([]);
+  const [editForm, setEditForm] = useState<{
+    plan_id: string;
+    start_date: string;
+    payment_terms: string;
+    lines: LineForm[];
+  }>({
+    plan_id: "",
+    start_date: "",
+    payment_terms: "immediate",
+    lines: [{ product_id: "", variant_id: "", quantity: "1", unit_price: "" }],
+  });
 
   async function load() {
     setLoading(true);
@@ -117,6 +164,108 @@ export default function SubscriptionDetail() {
     } catch (err) {
       toast.error(errorMessage(err, `${a.label} failed`));
     } finally {
+      setBusy(null);
+    }
+  }
+
+  async function openEdit() {
+    if (!sub) return;
+    try {
+      const [pl, pr] = await Promise.allSettled([api.get("/plans"), api.get("/products")]);
+      if (pl.status === "fulfilled" && Array.isArray(pl.value.data)) setPlans(pl.value.data);
+      if (pr.status === "fulfilled" && Array.isArray(pr.value.data)) setProducts(pr.value.data);
+    } catch {}
+
+    setEditForm({
+      plan_id: String(sub.plan?.id ?? ""),
+      start_date: sub.start_date || new Date().toISOString().slice(0, 10),
+      payment_terms: String(sub.payment_terms || "immediate"),
+      lines:
+        sub.lines && sub.lines.length > 0
+          ? sub.lines.map((l: any) => ({
+              product_id: String(l.product_id ?? ""),
+              variant_id: l.variant_id ? String(l.variant_id) : "",
+              quantity: String(l.quantity || 1),
+              unit_price: toRupees(l.unit_price) || "0",
+            }))
+          : [{ product_id: "", variant_id: "", quantity: "1", unit_price: "" }],
+    });
+    setEditOpen(true);
+  }
+
+  function priceFor(productId: string, variantId: string) {
+    const product = products.find((p) => String(p.id) === productId);
+    if (!product) return "";
+    const variant = product.variants?.find((v: any) => String(v.id) === variantId);
+    return toRupees(product.sales_price + (variant?.extra_price ?? 0)) || "0";
+  }
+
+  function setEditLine(i: number, key: keyof LineForm, value: string) {
+    setEditForm((f) => ({
+      ...f,
+      lines: f.lines.map((l, idx) => {
+        if (idx !== i) return l;
+        if (key === "product_id") return { ...l, product_id: value, variant_id: "", unit_price: priceFor(value, "") };
+        if (key === "variant_id") return { ...l, variant_id: value, unit_price: priceFor(l.product_id, value) };
+        return { ...l, [key]: value };
+      }),
+    }));
+  }
+
+  async function handleEditSave(e: React.FormEvent) {
+    e.preventDefault();
+    if (!sub) return;
+    const validLines = editForm.lines.filter((l) => l.product_id);
+    if (!editForm.plan_id) return toast.error("Please choose a plan");
+    if (validLines.length === 0) return toast.error("Add at least one product line");
+
+    let taxId: number | null = null;
+    try {
+      const { data: tx } = await api.get("/taxes");
+      const all: any[] = Array.isArray(tx) ? tx : [];
+      const pick = all.find((t: any) => t.is_default) ?? all.find((t: any) => Number(t.rate) === 18) ?? null;
+      taxId = pick?.id ?? null;
+    } catch {}
+
+    const body = {
+      customer_id: sub.customer?.id,
+      plan_id: Number(editForm.plan_id),
+      start_date: editForm.start_date,
+      payment_terms: editForm.payment_terms,
+      lines: validLines.map((l) => ({
+        product_id: Number(l.product_id),
+        variant_id: l.variant_id ? Number(l.variant_id) : null,
+        quantity: Math.max(1, parseInt(l.quantity) || 1),
+        unit_price: toPaise(l.unit_price),
+        tax_id: taxId,
+      })),
+    };
+
+    setEditSaving(true);
+    try {
+      const { data } = await api.put(`/subscriptions/${sub.id}`, body);
+      toast.success(`Subscription ${data?.number ?? sub.number} updated`);
+      setEditOpen(false);
+      load();
+    } catch (err) {
+      toast.error(errorMessage(err, "Could not update subscription"));
+    } finally {
+      setEditSaving(false);
+    }
+  }
+
+  async function handleDelete() {
+    if (!sub) return;
+    if (!confirm(`Are you sure you want to delete subscription "${sub.number}"? All associated invoices will also be permanently deleted.`)) {
+      return;
+    }
+    setBusy("delete");
+    try {
+      await api.delete(`/subscriptions/${sub.id}`);
+      toast.success(`Subscription ${sub.number} deleted`);
+      navigate("/subscriptions");
+    } catch (err) {
+      toast.error(errorMessage(err, "Could not delete subscription"));
       setBusy(null);
     }
   }
@@ -165,7 +314,27 @@ export default function SubscriptionDetail() {
               {sub.customer?.email ? ` · ${sub.customer.email}` : ""}
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {isAdmin && (
+              <>
+                <button
+                  onClick={openEdit}
+                  disabled={busy !== null}
+                  className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 ring-1 ring-slate-300 transition hover:bg-slate-50 disabled:opacity-60"
+                >
+                  <Pencil className="h-4 w-4 text-indigo-600" />
+                  Edit
+                </button>
+                <button
+                  onClick={handleDelete}
+                  disabled={busy !== null}
+                  className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-red-600 ring-1 ring-red-200 transition hover:bg-red-50 disabled:opacity-60"
+                >
+                  {busy === "delete" ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                  Delete
+                </button>
+              </>
+            )}
             {actions.map((a) => {
               const Icon = a.icon;
               return (
@@ -332,6 +501,117 @@ export default function SubscriptionDetail() {
           )}
         </div>
       </div>
+
+      {/* Edit Modal (Admin only) */}
+      <Modal open={editOpen} title={`Edit subscription ${sub.number}`} onClose={() => setEditOpen(false)} wide>
+        <form onSubmit={handleEditSave} className="space-y-5">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label className={labelCls}>Plan</label>
+              <select value={editForm.plan_id} onChange={(e) => setEditForm({ ...editForm, plan_id: e.target.value })} className={inputCls}>
+                <option value="">Select plan</option>
+                {plans.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name} · {formatINR(p.price)} / {p.billing_period}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className={labelCls}>Start date</label>
+              <input type="date" value={editForm.start_date} onChange={(e) => setEditForm({ ...editForm, start_date: e.target.value })} className={inputCls} />
+            </div>
+            <div>
+              <label className={labelCls}>Payment terms</label>
+              <select value={editForm.payment_terms} onChange={(e) => setEditForm({ ...editForm, payment_terms: e.target.value })} className={inputCls}>
+                {TERMS.map((t) => (
+                  <option key={t.value} value={t.value}>
+                    {t.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between">
+              <label className={labelCls}>Order lines</label>
+              <button
+                type="button"
+                onClick={() => setEditForm((f) => ({ ...f, lines: [...f.lines, { product_id: "", variant_id: "", quantity: "1", unit_price: "" }] }))}
+                className="text-xs font-semibold text-indigo-600 hover:text-indigo-700"
+              >
+                + Add line
+              </button>
+            </div>
+
+            <div className="mt-2 space-y-2">
+              {editForm.lines.map((l, i) => {
+                const product = products.find((p) => String(p.id) === l.product_id);
+                const variants = product?.variants ?? [];
+                return (
+                  <div key={i} className="flex flex-wrap items-center gap-2 rounded-xl bg-slate-50 p-2 sm:flex-nowrap">
+                    <select value={l.product_id} onChange={(e) => setEditLine(i, "product_id", e.target.value)} className={`${inputCls} min-w-[140px] flex-1`}>
+                      <option value="">Select product</option>
+                      {products.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name}
+                        </option>
+                      ))}
+                    </select>
+
+                    {variants.length > 0 && (
+                      <select value={l.variant_id} onChange={(e) => setEditLine(i, "variant_id", e.target.value)} className={`${inputCls} min-w-[120px]`}>
+                        <option value="">Base</option>
+                        {variants.map((v: any) => (
+                          <option key={v.id} value={v.id}>
+                            {v.attribute}: {v.value} {v.extra_price ? `(+${formatINR(v.extra_price)})` : ""}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+
+                    <input
+                      type="number"
+                      min="1"
+                      value={l.quantity}
+                      onChange={(e) => setEditLine(i, "quantity", e.target.value)}
+                      placeholder="Qty"
+                      className={`${inputCls} w-20 text-right`}
+                    />
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={l.unit_price}
+                      onChange={(e) => setEditLine(i, "unit_price", e.target.value)}
+                      placeholder="Price"
+                      className={`${inputCls} w-28 text-right`}
+                    />
+                    <button
+                      type="button"
+                      disabled={editForm.lines.length === 1}
+                      onClick={() => setEditForm((f) => ({ ...f, lines: f.lines.filter((_, idx) => idx !== i) }))}
+                      className="rounded-lg p-2 text-slate-400 hover:text-red-600 disabled:opacity-30"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 border-t border-slate-200 pt-4">
+            <button type="button" onClick={() => setEditOpen(false)} className={btnSecondary}>
+              Cancel
+            </button>
+            <button type="submit" disabled={editSaving} className={btnPrimary.replace("w-full", "")}>
+              {editSaving && <LoaderCircle className="h-4 w-4 animate-spin" />}
+              Update subscription
+            </button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 }

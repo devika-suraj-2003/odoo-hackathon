@@ -119,6 +119,32 @@ class StaffCreate(BaseModel):
         return validate_password_rules(v)
 
 
+class UserUpdate(BaseModel):
+    """
+    Schema for updating an existing user (customer or staff).
+    Fields are optional; only provided fields are updated.
+    """
+    name: Optional[str] = Field(None, min_length=1, max_length=150, description="Full name of the user")
+    email: Optional[str] = Field(None, description="User email address")
+    phone: Optional[str] = Field(None, max_length=20, description="Contact phone number")
+    state: Optional[str] = Field(None, max_length=100, description="State or province")
+    password: Optional[str] = Field(None, description="Optional new plaintext password")
+
+    @field_validator("email")
+    @classmethod
+    def normalize_and_validate_email(cls, v: Optional[str]) -> Optional[str]:
+        if v is None or v == "":
+            return None
+        return validate_email_address(v)
+
+    @field_validator("password")
+    @classmethod
+    def check_password_complexity(cls, v: Optional[str]) -> Optional[str]:
+        if v is None or v == "":
+            return None
+        return validate_password_rules(v)
+
+
 class UserResponse(BaseModel):
     """
     Public response schema for user profiles.

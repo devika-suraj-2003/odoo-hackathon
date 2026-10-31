@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
-import { Plus, Search, Repeat, LoaderCircle, X, List, LayoutGrid, ArrowRight } from "lucide-react";
+import { Plus, Search, Repeat, LoaderCircle, X, List, LayoutGrid, ArrowRight, Pencil, Trash2 } from "lucide-react";
 import api from "../api/client";
 import { errorMessage } from "../api/errors";
 import Modal from "../components/Modal";
 import StatusBadge from "../components/StatusBadge";
 import { inputCls, labelCls, btnPrimary, btnSecondary } from "../components/ui";
 import { formatINR, toPaise, toRupees } from "../lib/money";
+import { useAuth } from "../context/AuthContext";
 
 type Status = "draft" | "quotation" | "confirmed" | "active" | "paused" | "closed";
 type Subscription = {
@@ -59,6 +60,9 @@ function formatDate(d?: string | null) {
 
 export default function Subscriptions() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
+
   const [items, setItems] = useState<Subscription[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<"all" | Status>("all");
@@ -73,6 +77,7 @@ export default function Subscriptions() {
   const [moving, setMoving] = useState<number | null>(null);
 
   const [open, setOpen] = useState(false);
+  const [editingSub, setEditingSub] = useState<Subscription | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm());
   const [saving, setSaving] = useState(false);
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -141,9 +146,54 @@ export default function Subscriptions() {
   }
 
   function openNew() {
+    setEditingSub(null);
     setForm(emptyForm());
     setOpen(true);
     loadLookups();
+  }
+
+  async function openEditSub(s: Subscription, e?: React.MouseEvent) {
+    if (e) e.stopPropagation();
+    setEditingSub(s);
+    loadLookups();
+    setOpen(true);
+    try {
+      const { data } = await api.get(`/subscriptions/${s.id}`);
+      if (data) {
+        setForm({
+          customer_id: String(data.customer?.id ?? ""),
+          plan_id: String(data.plan?.id ?? ""),
+          template_id: "",
+          start_date: data.start_date || today(),
+          payment_terms: String(data.payment_terms || "immediate"),
+          lines:
+            data.lines && data.lines.length > 0
+              ? data.lines.map((l: any) => ({
+                  product_id: String(l.product_id),
+                  variant_id: l.variant_id ? String(l.variant_id) : "",
+                  quantity: String(l.quantity || 1),
+                  unit_price: toRupees(l.unit_price) || "0",
+                }))
+              : [{ ...EMPTY_LINE }],
+        });
+      }
+    } catch (err) {
+      toast.error(errorMessage(err, "Could not load subscription details"));
+    }
+  }
+
+  async function handleDeleteSub(s: Subscription, e?: React.MouseEvent) {
+    if (e) e.stopPropagation();
+    if (!confirm(`Are you sure you want to delete subscription "${s.number}"? All invoices for this subscription will also be removed.`)) {
+      return;
+    }
+    try {
+      await api.delete(`/subscriptions/${s.id}`);
+      toast.success(`Subscription ${s.number} deleted`);
+      setItems((list) => list.filter((item) => item.id !== s.id));
+    } catch (err) {
+      toast.error(errorMessage(err, "Could not delete subscription"));
+    }
   }
 
   function priceFor(productId: string, variantId: string) {
@@ -216,13 +266,20 @@ export default function Subscriptions() {
     };
     setSaving(true);
     try {
-      const { data } = await api.post("/subscriptions/", body);
-      toast.success(`Subscription ${data?.number ?? ""} created`);
-      setOpen(false);
-      if (data?.id) navigate(`/subscriptions/${data.id}`);
-      else load();
+      if (editingSub) {
+        const { data } = await api.put(`/subscriptions/${editingSub.id}`, body);
+        toast.success(`Subscription ${data?.number ?? editingSub.number} updated`);
+        setOpen(false);
+        load();
+      } else {
+        const { data } = await api.post("/subscriptions/", body);
+        toast.success(`Subscription ${data?.number ?? ""} created`);
+        setOpen(false);
+        if (data?.id) navigate(`/subscriptions/${data.id}`);
+        else load();
+      }
     } catch (err) {
-      toast.error(errorMessage(err, "Could not create subscription"));
+      toast.error(errorMessage(err, editingSub ? "Could not update subscription" : "Could not create subscription"));
     } finally {
       setSaving(false);
     }
@@ -304,7 +361,27 @@ export default function Subscriptions() {
                       >
                         <div className="flex items-center justify-between">
                           <span className="text-xs font-semibold text-indigo-600">{s.number}</span>
-                          <span className="text-sm font-bold text-slate-900">{formatINR(s.total)}</span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-sm font-bold text-slate-900">{formatINR(s.total)}</span>
+                            {isAdmin && (
+                              <div className="flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
+                                <button
+                                  onClick={(e) => openEditSub(s, e)}
+                                  title="Edit subscription"
+                                  className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-indigo-600"
+                                >
+                                  <Pencil className="h-3.5 w-3.5" />
+                                </button>
+                                <button
+                                  onClick={(e) => handleDeleteSub(s, e)}
+                                  title="Delete subscription"
+                                  className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                            )}
+                          </div>
                         </div>
                         <p className="mt-1.5 font-semibold text-slate-900">{s.customer?.name ?? "—"}</p>
                         <p className="text-xs text-slate-500">{s.plan?.name ?? "—"}</p>
@@ -341,20 +418,21 @@ export default function Subscriptions() {
                 <th className="px-5 py-3">Start</th>
                 <th className="px-5 py-3">Next billing</th>
                 <th className="px-5 py-3 text-right">Total</th>
+                {isAdmin && <th className="px-5 py-3 text-right">Actions</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {loading &&
                 [1, 2, 3, 4].map((i) => (
                   <tr key={i}>
-                    <td colSpan={7} className="px-5 py-4">
+                    <td colSpan={isAdmin ? 8 : 7} className="px-5 py-4">
                       <div className="h-4 w-full animate-pulse rounded bg-slate-100" />
                     </td>
                   </tr>
                 ))}
               {!loading && filtered.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-5 py-16 text-center">
+                  <td colSpan={isAdmin ? 8 : 7} className="px-5 py-16 text-center">
                     <Repeat className="mx-auto h-10 w-10 text-slate-300" />
                     <p className="mt-3 font-semibold text-slate-700">No subscriptions here</p>
                     <p className="text-sm text-slate-500">Create a subscription from a plan or a quotation template.</p>
@@ -379,6 +457,26 @@ export default function Subscriptions() {
                     <td className="px-5 py-4 text-slate-600">{formatDate(s.start_date)}</td>
                     <td className="px-5 py-4 text-slate-600">{formatDate(s.next_billing_date)}</td>
                     <td className="px-5 py-4 text-right font-semibold text-slate-900">{formatINR(s.total)}</td>
+                    {isAdmin && (
+                      <td className="px-5 py-4" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex justify-end gap-1">
+                          <button
+                            onClick={(e) => openEditSub(s, e)}
+                            title="Edit subscription"
+                            className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-indigo-600"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={(e) => handleDeleteSub(s, e)}
+                            title="Delete subscription"
+                            className="rounded-lg p-2 text-slate-400 hover:bg-red-50 hover:text-red-600"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))}
             </tbody>
@@ -386,7 +484,7 @@ export default function Subscriptions() {
         </div>
       )}
 
-      <Modal open={open} title="New subscription" onClose={() => setOpen(false)} wide>
+      <Modal open={open} title={editingSub ? `Edit subscription ${editingSub.number}` : "New subscription"} onClose={() => setOpen(false)} wide>
         <form onSubmit={handleSave} className="space-y-5">
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
@@ -429,7 +527,7 @@ export default function Subscriptions() {
             </div>
             <div>
               <label className={labelCls}>Start date</label>
-              <input required type="date" value={form.start_date} onChange={(e) => setForm({ ...form, start_date: e.target.value })} className={inputCls} />
+              <input type="date" value={form.start_date} onChange={(e) => setForm({ ...form, start_date: e.target.value })} className={inputCls} />
             </div>
             <div>
               <label className={labelCls}>Payment terms</label>
@@ -444,49 +542,65 @@ export default function Subscriptions() {
           </div>
 
           <div>
-            <div className="mb-2 flex items-center justify-between">
-              <label className="text-sm font-medium text-slate-700">Order lines</label>
-              <button type="button" onClick={() => setForm((f) => ({ ...f, lines: [...f.lines, { ...EMPTY_LINE }] }))} className="inline-flex items-center gap-1 text-sm font-semibold text-indigo-600 hover:text-indigo-700">
-                <Plus className="h-4 w-4" /> Add line
+            <div className="flex items-center justify-between">
+              <label className={labelCls}>Order lines</label>
+              <button
+                type="button"
+                onClick={() => setForm((f) => ({ ...f, lines: [...f.lines, { ...EMPTY_LINE }] }))}
+                className="text-xs font-semibold text-indigo-600 hover:text-indigo-700"
+              >
+                + Add line
               </button>
             </div>
-            <div className="grid grid-cols-[2fr_1.5fr_4.5rem_6.5rem_6rem_2rem] gap-2 px-1 pb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
-              <span>Product</span>
-              <span>Variant</span>
-              <span>Qty</span>
-              <span>Unit ₹</span>
-              <span className="text-right">Amount</span>
-              <span />
-            </div>
-            <div className="space-y-2">
+
+            <div className="mt-2 space-y-2">
               {form.lines.map((l, i) => {
-                const variants = products.find((p) => String(p.id) === l.product_id)?.variants ?? [];
+                const product = products.find((p) => String(p.id) === l.product_id);
+                const variants = product?.variants ?? [];
                 return (
-                  <div key={i} className="grid grid-cols-[2fr_1.5fr_4.5rem_6.5rem_6rem_2rem] items-center gap-2">
-                    <select value={l.product_id} onChange={(e) => setLine(i, "product_id", e.target.value)} className={inputCls}>
-                      <option value="">Select</option>
+                  <div key={i} className="flex flex-wrap items-center gap-2 rounded-xl bg-slate-50 p-2 sm:flex-nowrap">
+                    <select value={l.product_id} onChange={(e) => setLine(i, "product_id", e.target.value)} className={`${inputCls} min-w-[140px] flex-1`}>
+                      <option value="">Select product</option>
                       {products.map((p) => (
                         <option key={p.id} value={p.id}>
                           {p.name}
                         </option>
                       ))}
                     </select>
-                    <select value={l.variant_id} onChange={(e) => setLine(i, "variant_id", e.target.value)} disabled={variants.length === 0} className={`${inputCls} disabled:bg-slate-50 disabled:text-slate-400`}>
-                      <option value="">{variants.length ? "Standard" : "—"}</option>
-                      {variants.map((v) => (
-                        <option key={v.id} value={v.id}>
-                          {v.value} (+{formatINR(v.extra_price)})
-                        </option>
-                      ))}
-                    </select>
-                    <input type="number" min="1" value={l.quantity} onChange={(e) => setLine(i, "quantity", e.target.value)} className={inputCls} />
-                    <input type="number" min="0" step="0.01" value={l.unit_price} onChange={(e) => setLine(i, "unit_price", e.target.value)} className={inputCls} />
-                    <span className="text-right text-sm font-semibold text-slate-800">{formatINR(lineAmount(l))}</span>
+
+                    {variants.length > 0 && (
+                      <select value={l.variant_id} onChange={(e) => setLine(i, "variant_id", e.target.value)} className={`${inputCls} min-w-[120px]`}>
+                        <option value="">Base</option>
+                        {variants.map((v) => (
+                          <option key={v.id} value={v.id}>
+                            {v.attribute}: {v.value} {v.extra_price ? `(+${formatINR(v.extra_price)})` : ""}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+
+                    <input
+                      type="number"
+                      min="1"
+                      value={l.quantity}
+                      onChange={(e) => setLine(i, "quantity", e.target.value)}
+                      placeholder="Qty"
+                      className={`${inputCls} w-20 text-right`}
+                    />
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={l.unit_price}
+                      onChange={(e) => setLine(i, "unit_price", e.target.value)}
+                      placeholder="Price"
+                      className={`${inputCls} w-28 text-right`}
+                    />
+                    <span className="w-24 text-right text-xs font-semibold text-slate-700">{formatINR(lineAmount(l))}</span>
                     <button
                       type="button"
-                      onClick={() => setForm((f) => ({ ...f, lines: f.lines.filter((_, idx) => idx !== i) }))}
                       disabled={form.lines.length === 1}
-                      className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-30"
+                      onClick={() => setForm((f) => ({ ...f, lines: f.lines.filter((_, idx) => idx !== i) }))}
+                      className="rounded-lg p-2 text-slate-400 hover:text-red-600 disabled:opacity-30"
                     >
                       <X className="h-4 w-4" />
                     </button>
@@ -509,7 +623,7 @@ export default function Subscriptions() {
             </button>
             <button type="submit" disabled={saving} className={btnPrimary.replace("w-full", "")}>
               {saving && <LoaderCircle className="h-4 w-4 animate-spin" />}
-              Create subscription
+              {editingSub ? "Update subscription" : "Create subscription"}
             </button>
           </div>
         </form>
