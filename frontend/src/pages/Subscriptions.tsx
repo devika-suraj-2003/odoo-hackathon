@@ -31,15 +31,15 @@ type FormState = { customer_id: string; plan_id: string; template_id: string; st
 
 const today = () => new Date().toISOString().slice(0, 10);
 const EMPTY_LINE: LineForm = { product_id: "", variant_id: "", quantity: "1", unit_price: "" };
-const emptyForm = (): FormState => ({ customer_id: "", plan_id: "", template_id: "", start_date: today(), payment_terms: "0", lines: [{ ...EMPTY_LINE }] });
+const emptyForm = (): FormState => ({ customer_id: "", plan_id: "", template_id: "", start_date: today(), payment_terms: "immediate", lines: [{ ...EMPTY_LINE }] });
 
 const STATUSES: Status[] = ["draft", "quotation", "confirmed", "active", "paused", "closed"];
 const TABS: ("all" | Status)[] = ["all", ...STATUSES];
 const TERMS = [
-  { value: "0", label: "Immediate payment" },
-  { value: "15", label: "15 days" },
-  { value: "30", label: "30 days" },
-  { value: "45", label: "45 days" },
+  { value: "immediate", label: "Immediate payment" },
+  { value: "15_days", label: "15 days" },
+  { value: "30_days", label: "30 days" },
+  { value: "end_of_month", label: "End of month" },
 ];
 const DOT: Record<Status, string> = {
   draft: "bg-slate-400", quotation: "bg-amber-500", confirmed: "bg-sky-500", active: "bg-emerald-500", paused: "bg-violet-500", closed: "bg-slate-300",
@@ -198,7 +198,7 @@ export default function Subscriptions() {
       plan_id: Number(form.plan_id),
       template_id: form.template_id ? Number(form.template_id) : null,
       start_date: form.start_date,
-      payment_terms: Number(form.payment_terms) || 0,
+      payment_terms: form.payment_terms,
       lines: lines.map((l) => ({
         product_id: Number(l.product_id),
         variant_id: l.variant_id ? Number(l.variant_id) : null,
