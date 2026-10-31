@@ -281,7 +281,7 @@ export default function Products() {
             <button type="button" onClick={() => setOpen(false)} className={btnSecondary}>
               Cancel
             </button>
-            <button type="submit" disabled={saving} className={`${btnPrimary} w-auto`}>
+            <button type="submit" disabled={saving} className={`${btnPrimary.replace("w-full", "")}`}>
               {saving && <LoaderCircle className="h-4 w-4 animate-spin" />}
               {editing ? "Save changes" : "Create product"}
             </button>

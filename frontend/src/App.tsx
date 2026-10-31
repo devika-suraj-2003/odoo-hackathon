@@ -2,7 +2,6 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { useAuth, homeFor } from "./context/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Layout from "./components/Layout";
-import Placeholder from "./pages/Placeholder";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import ForgotPassword from "./pages/ForgotPassword";
@@ -20,6 +19,8 @@ import PortalProfile from "./pages/PortalProfile";
 import Dashboard from "./pages/Dashboard";
 import People from "./pages/People";
 import Taxes from "./pages/Taxes";
+import Discounts from "./pages/Discounts";
+import Templates from "./pages/Templates";
 
 function Home() {
   const { user } = useAuth();
@@ -50,9 +51,9 @@ export default function App() {
           <Route element={<ProtectedRoute roles={["admin"]} />}>
             <Route path="/products" element={<Products />} />
             <Route path="/plans" element={<Plans />} />
-            <Route path="/templates" element={<Placeholder title="Quotation templates" />} />
+            <Route path="/templates" element={<Templates />} />
             <Route path="/taxes" element={<Taxes />} />
-            <Route path="/discounts" element={<Placeholder title="Discounts" />} />
+            <Route path="/discounts" element={<Discounts />} />
             <Route path="/staff" element={<People role="staff" />} />
           </Route>
 
