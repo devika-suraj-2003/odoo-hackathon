@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, Users, Repeat, FileText, CreditCard, Package, CalendarClock,
@@ -6,6 +7,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { useAuth, type Role } from "../context/AuthContext";
 import CommandPalette from "./CommandPalette";
+import TimeMachineBar from "./TimeMachineBar";
 
 type Item = { to: string; label: string; icon: LucideIcon; roles: Role[] };
 
@@ -36,6 +38,7 @@ export default function Layout() {
   const { user, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
+  const [refreshKey, setRefreshKey] = useState(0);
   if (!user) return null;
 
   const menu = items.filter((i) => i.roles.includes(user.role));
@@ -109,7 +112,9 @@ export default function Layout() {
           </div>
         </header>
 
-        <main className="p-8">
+        {user.role !== "customer" && <TimeMachineBar onChanged={() => setRefreshKey((k) => k + 1)} />}
+
+        <main key={refreshKey} className="p-8">
           <Outlet />
         </main>
       </div>
