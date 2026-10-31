@@ -22,10 +22,31 @@ function nice(d: string) {
   return new Date(d).toLocaleDateString("en-IN", { weekday: "short", day: "2-digit", month: "short", year: "numeric" });
 }
 
-function createdCount(data: any): number | null {
-  if (!data || typeof data !== "object") return null;
-  const n = data.created ?? data.invoices_created ?? data.count;
-  return typeof n === "number" ? n : null;
+// Bills every active subscription whose next billing date has arrived.
+// Uses the backend "renew" action, which creates the next period's invoice and
+// moves next_billing_date forward. The database blocks a second invoice for the same period.
+async function billDue(today: string): Promise<number> {
+  const { data } = await api.get("/subscriptions");
+  const subs: any[] = Array.isArray(data) ? data : [];
+  let created = 0;
+  for (const s of subs) {
+    if (s.status !== "active") continue;
+    let next: string | null = s.next_billing_date ?? null;
+    let rounds = 0;
+    while (next && next <= today && rounds < 12) {
+      try {
+        const res = await api.post(`/subscriptions/${s.id}/renew`);
+        created += 1;
+        const newNext = res.data?.next_billing_date ?? null;
+        if (!newNext || newNext === next) break;
+        next = newNext;
+      } catch {
+        break;
+      }
+      rounds += 1;
+    }
+  }
+  return created;
 }
 
 export default function TimeMachineBar({ onChanged }: { onChanged: () => void }) {
@@ -49,10 +70,11 @@ export default function TimeMachineBar({ onChanged }: { onChanged: () => void })
     setBusy(days);
     try {
       const { data } = await api.post("/settings/time-travel", { days });
-      setClock({ today: data.simulated_today, simulated: true });
+      const today = data.simulated_today;
+      setClock({ today, simulated: true });
       setRuns([]);
-      const n = createdCount(data);
-      toast.success(`Jumped to ${nice(data.simulated_today)}${n !== null ? ` · ${n} invoice${n === 1 ? "" : "s"} created` : ""}`, { duration: 4000 });
+      const n = await billDue(today);
+      toast.success(`Jumped to ${nice(today)} · ${n} invoice${n === 1 ? "" : "s"} created`, { duration: 4000 });
       onChanged();
     } catch (err) {
       toast.error(errorMessage(err, "Could not move time"));
@@ -79,19 +101,15 @@ export default function TimeMachineBar({ onChanged }: { onChanged: () => void })
   async function runBilling() {
     setBusy("bill");
     try {
-      const { data } = await api.post("/billing/run");
-      const n = createdCount(data) ?? 0;
+      const today = clock?.today ?? new Date().toISOString().slice(0, 10);
+      const n = await billDue(today);
       const isRepeat = runs.length > 0;
       setRuns((r) => [...r, n]);
-      if (isRepeat && n === 0) {
-        toast.success("Ran billing again: 0 new invoices. No double billing ✓", { duration: 5000 });
-      } else {
-        toast.success(`Billing run complete · ${n} invoice${n === 1 ? "" : "s"} created`, { duration: 4000 });
-      }
+      if (isRepeat && n === 0) toast.success("Ran billing again: 0 new invoices. No double billing ✓", { duration: 5000 });
+      else toast.success(`Billing run complete · ${n} invoice${n === 1 ? "" : "s"} created`, { duration: 4000 });
       onChanged();
-    } catch (err: any) {
-      if (err?.response?.status === 404) toast.error("Billing run is not available on the backend yet");
-      else toast.error(errorMessage(err, "Billing run failed"));
+    } catch (err) {
+      toast.error(errorMessage(err, "Billing run failed"));
     } finally {
       setBusy(null);
     }
