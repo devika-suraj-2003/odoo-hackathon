@@ -9,6 +9,7 @@ import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
 import Products from "./pages/Products";
 import Plans from "./pages/Plans";
+import Subscriptions from "./pages/Subscriptions";
 
 function Home() {
   const { user } = useAuth();
@@ -29,7 +30,8 @@ export default function App() {
           <Route element={<ProtectedRoute roles={["admin", "staff"]} />}>
             <Route path="/dashboard" element={<Placeholder title="Dashboard" />} />
             <Route path="/customers" element={<Placeholder title="Customers" />} />
-            <Route path="/subscriptions" element={<Placeholder title="Subscriptions" />} />
+            <Route path="/subscriptions" element={<Subscriptions />} />
+            <Route path="/subscriptions/:id" element={<Placeholder title="Subscription detail" />} />
             <Route path="/invoices" element={<Placeholder title="Invoices" />} />
             <Route path="/payments" element={<Placeholder title="Payments" />} />
           </Route>

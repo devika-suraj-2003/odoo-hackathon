@@ -37,7 +37,7 @@ export default function Products() {
     setLoading(true);
     try {
       const { data } = await api.get("/products");
-      setItems(data);
+               setItems(Array.isArray(data) ? data : []);
     } catch (err) {
       toast.error(errorMessage(err, "Could not load products"));
     } finally {
