@@ -58,6 +58,7 @@ from app.schemas.payment import (
     RazorpayVerifyRequest,
 )
 from app.schemas.subscription import SubscriptionCreate, SubscriptionResponse
+from app.schemas.imports import CustomerImportSummary, FailedRow
 
 __all__ = [
     "TaxBase",
@@ -101,4 +102,6 @@ __all__ = [
     "RazorpayVerifyRequest",
     "SubscriptionCreate",
     "SubscriptionResponse",
+    "CustomerImportSummary",
+    "FailedRow",
 ]

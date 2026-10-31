@@ -74,12 +74,28 @@ class UserSignup(BaseModel):
         return validate_password_rules(v)
 
 
-class CustomerCreate(UserSignup):
+class CustomerCreate(BaseModel):
     """
     Schema for administrator-driven customer creation (POST /api/users).
-    Explicitly forbids client-assigned roles; always assigned role='customer' on backend.
+    Accepts payload from frontend People.tsx (which includes optional role);
+    the backend always enforces role='customer'.
     """
-    pass
+    name: str = Field(..., min_length=1, max_length=150, description="Full name of the customer")
+    email: str = Field(..., description="Customer email address")
+    password: str = Field(..., description="Plaintext password meeting complexity criteria")
+    phone: Optional[str] = Field(None, max_length=20, description="Contact phone number")
+    state: Optional[str] = Field(None, max_length=100, description="State or province")
+    role: Optional[str] = Field(None, description="Role field accepted from frontend form, enforced as customer on backend")
+
+    @field_validator("email")
+    @classmethod
+    def normalize_and_validate_email(cls, v: str) -> str:
+        return validate_email_address(v)
+
+    @field_validator("password")
+    @classmethod
+    def check_password_complexity(cls, v: str) -> str:
+        return validate_password_rules(v)
 
 
 class StaffCreate(BaseModel):

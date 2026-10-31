@@ -16,7 +16,7 @@ from fastapi.openapi.utils import get_openapi
 
 from app.database import Base, engine
 import app.models  # Registers all 4 SQLAlchemy models on Base.metadata
-from app.core.seed import seed_dev_accounts
+from app.core.seed import seed_dev_accounts, seed_all_demo_data
 
 from app.routers import (
     auth,
@@ -47,7 +47,7 @@ async def lifespan(app: FastAPI):
       2. Seeds initial development accounts (admin, staff, customer) idempotently.
     """
     Base.metadata.create_all(bind=engine)
-    seed_dev_accounts()
+    seed_all_demo_data()
     from app.database import SessionLocal
     from app.services.tax import seed_default_taxes
 

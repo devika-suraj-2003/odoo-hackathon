@@ -63,6 +63,7 @@ def time_travel(
             db=db,
         )
 
+        new_simulated_date = clock.today(db=db)
         invoices_generated = run_billing(
             db,
             new_simulated_date,
@@ -77,6 +78,7 @@ def time_travel(
             simulated_today=new_simulated_date,
             real_today=date.today(),
             days_advanced=request.days,
+            invoices_created=invoices_generated,
             invoices_generated=invoices_generated,
         )
     except ValueError as ve:

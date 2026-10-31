@@ -12,7 +12,7 @@ from app.database import get_db
 from app.models.user import User
 from app.schemas.user import CustomerCreate, StaffCreate, UserResponse
 from app.core.security import get_password_hash
-from app.core.dependencies import require_admin
+from app.core.dependencies import require_admin, require_staff_or_admin
 
 router = APIRouter(tags=["Users"])
 
@@ -29,14 +29,15 @@ def list_users(
     skip: int = Query(0, ge=0, description="Number of records to skip"),
     limit: int = Query(100, ge=1, le=1000, description="Max number of records to return"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_staff_or_admin),
 ):
     """
     List users for management pages:
-    - Restricted to administrators (role='admin').
-    - Optional role query parameter supports 'customer' and 'staff'.
+    - Accessible to authenticated staff and admin users (per frontend route permissions).
+    - Accepts optional role query parameter: 'customer' or 'staff'.
     - Rejects invalid role values with HTTP 400 Bad Request.
-    - Returns safe user fields (id, name, email, role, phone, state, created_at).
+    - Returns a JSON array of safe user fields (id, name, email, role, phone, state, created_at).
+    - Returns an empty array if no matching users exist.
     - Never exposes password_hash.
     """
     stmt = select(User)
@@ -63,11 +64,11 @@ def list_users(
 def create_customer(
     customer_in: CustomerCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_staff_or_admin),
 ):
     """
     Create a customer account:
-    - Restricted to administrators (role='admin').
+    - Accessible to staff and admin users.
     - Accepts name, email, password, phone, and state.
     - Validates password complexity via CustomerCreate schema.
     - Rejects duplicate email registration with HTTP 409 Conflict.
@@ -87,7 +88,7 @@ def create_customer(
         name=customer_in.name,
         email=customer_in.email,
         password_hash=get_password_hash(customer_in.password),
-        role="customer",
+        role="customer",  # Always customer
         phone=customer_in.phone,
         state=customer_in.state,
     )

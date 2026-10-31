@@ -18,7 +18,7 @@ from app.core.dependencies import (
     require_admin,
     require_staff_or_admin,
 )
-from app.core.seed import seed_admin, seed_dev_accounts
+from app.core.seed import seed_admin, seed_dev_accounts, seed_all_demo_data
 
 __all__ = [
     "settings",
@@ -35,4 +35,5 @@ __all__ = [
     "require_staff_or_admin",
     "seed_admin",
     "seed_dev_accounts",
+    "seed_all_demo_data",
 ]
