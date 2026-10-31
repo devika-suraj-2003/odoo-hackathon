@@ -31,15 +31,15 @@ type FormState = { customer_id: string; plan_id: string; template_id: string; st
 
 const today = () => new Date().toISOString().slice(0, 10);
 const EMPTY_LINE: LineForm = { product_id: "", variant_id: "", quantity: "1", unit_price: "" };
-const emptyForm = (): FormState => ({ customer_id: "", plan_id: "", template_id: "", start_date: today(), payment_terms: "immediate", lines: [{ ...EMPTY_LINE }] });
+const emptyForm = (): FormState => ({ customer_id: "", plan_id: "", template_id: "", start_date: today(), payment_terms: "0", lines: [{ ...EMPTY_LINE }] });
 
 const STATUSES: Status[] = ["draft", "quotation", "confirmed", "active", "paused", "closed"];
 const TABS: ("all" | Status)[] = ["all", ...STATUSES];
 const TERMS = [
-  { value: "immediate", label: "Immediate payment" },
-  { value: "15_days", label: "15 days" },
-  { value: "30_days", label: "30 days" },
-  { value: "end_of_month", label: "End of month" },
+  { value: "0", label: "Immediate payment" },
+  { value: "15", label: "15 days" },
+  { value: "30", label: "30 days" },
+  { value: "45", label: "45 days" },
 ];
 const DOT: Record<Status, string> = {
   draft: "bg-slate-400", quotation: "bg-amber-500", confirmed: "bg-sky-500", active: "bg-emerald-500", paused: "bg-violet-500", closed: "bg-slate-300",
@@ -63,7 +63,13 @@ export default function Subscriptions() {
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<"all" | Status>("all");
   const [query, setQuery] = useState("");
-  const [view, setView] = useState<"list" | "board">(() => (localStorage.getItem("subs-view") as "list" | "board") || "list");
+  const [view, setView] = useState<"list" | "board">(() => {
+    try {
+      return (localStorage.getItem("subs-view") as "list" | "board") || "list";
+    } catch {
+      return "list";
+    }
+  });
   const [moving, setMoving] = useState<number | null>(null);
 
   const [open, setOpen] = useState(false);
@@ -77,7 +83,7 @@ export default function Subscriptions() {
   async function load() {
     setLoading(true);
     try {
-      const { data } = await api.get("/subscriptions");
+      const { data } = await api.get("/subscriptions/");
       setItems(Array.isArray(data) ? data : []);
     } catch (err) {
       toast.error(errorMessage(err, "Could not load subscriptions"), { id: "subs-load" });
@@ -98,7 +104,7 @@ export default function Subscriptions() {
   }
 
   async function loadLookups() {
-    const [c, p, pl, t] = await Promise.allSettled([api.get("/users", { params: { role: "customer" } }), api.get("/products"), api.get("/plans"), api.get("/templates")]);
+    const [c, p, pl, t] = await Promise.allSettled([api.get("/users", { params: { role: "customer" } }), api.get("/products"), api.get("/plans"), api.get("/templates/")]);
     setCustomers(list(c));
     setProducts(list(p));
     setPlans(list(pl));
@@ -192,7 +198,7 @@ export default function Subscriptions() {
       plan_id: Number(form.plan_id),
       template_id: form.template_id ? Number(form.template_id) : null,
       start_date: form.start_date,
-      payment_terms: form.payment_terms,
+      payment_terms: Number(form.payment_terms) || 0,
       lines: lines.map((l) => ({
         product_id: Number(l.product_id),
         variant_id: l.variant_id ? Number(l.variant_id) : null,
@@ -202,7 +208,7 @@ export default function Subscriptions() {
     };
     setSaving(true);
     try {
-      const { data } = await api.post("/subscriptions", body);
+      const { data } = await api.post("/subscriptions/", body);
       toast.success(`Subscription ${data?.number ?? ""} created`);
       setOpen(false);
       if (data?.id) navigate(`/subscriptions/${data.id}`);
@@ -242,9 +248,7 @@ export default function Subscriptions() {
               <button
                 key={v}
                 onClick={() => changeView(v)}
-                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-semibold capitalize transition ${
-                  view === v ? "bg-indigo-600 text-white" : "text-slate-500 hover:text-slate-800"
-                }`}
+                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-semibold capitalize transition ${view === v ? "bg-indigo-600 text-white" : "text-slate-500 hover:text-slate-800"}`}
               >
                 <Icon className="h-4 w-4" /> {v}
               </button>
@@ -379,15 +383,19 @@ export default function Subscriptions() {
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <label className={labelCls}>Customer</label>
-              <select value={form.customer_id} onChange={(e) => setForm({ ...form, customer_id: e.target.value })} className={inputCls}>
-                <option value="">Select customer</option>
-                {customers.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                    {c.email ? ` (${c.email})` : ""}
-                  </option>
-                ))}
-              </select>
+              {customers.length > 0 ? (
+                <select value={form.customer_id} onChange={(e) => setForm({ ...form, customer_id: e.target.value })} className={inputCls}>
+                  <option value="">Select customer</option>
+                  {customers.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                      {c.email ? ` (${c.email})` : ""}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input type="number" min="1" value={form.customer_id} onChange={(e) => setForm({ ...form, customer_id: e.target.value })} placeholder="Customer ID (e.g. 3)" className={inputCls} />
+              )}
             </div>
             <div>
               <label className={labelCls}>Quotation template (optional)</label>

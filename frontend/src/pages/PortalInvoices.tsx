@@ -7,49 +7,7 @@ import { useAuth } from "../context/AuthContext";
 import StatusBadge from "../components/StatusBadge";
 import { formatINR } from "../lib/money";
 
-type Invoice = {
-  id: number;
-  number: string;
-  status: string;
-  invoice_date?: string | null;
-  due_date?: string | null;
-  total: number;
-  amount_paid?: number;
-  amount_due?: number;
-};
-type Payment = {
-  id: number;
-  invoice_id: number;
-  method: string;
-  amount: number;
-  payment_date: string;
-  note?: string | null;
-};
-type RazorpayPaymentResponse = {
-  razorpay_order_id: string;
-  razorpay_payment_id: string;
-  razorpay_signature: string;
-};
-type RazorpayOptions = {
-  key: string;
-  amount: number;
-  currency: string;
-  order_id: string;
-  name: string;
-  description: string;
-  prefill: { name?: string; email?: string };
-  theme: { color: string };
-  handler: (response: RazorpayPaymentResponse) => void;
-  modal: { ondismiss: () => void };
-};
-type RazorpayCheckout = { open: () => void; on: (event: string, callback: (response: { error?: { description?: string } }) => void) => void };
-type RazorpayConstructor = new (options: RazorpayOptions) => RazorpayCheckout;
-
-declare global {
-  interface Window {
-    Razorpay?: RazorpayConstructor;
-  }
-}
+type Invoice = { id: number; number: string; status: string; invoice_date?: string | null; due_date?: string | null; total: number; amount_due?: number };
 
 const todayStr = () => new Date().toISOString().slice(0, 10);
 const fmt = (d?: string | null) => (d ? new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—");
@@ -79,8 +37,9 @@ export default function PortalInvoices() {
 
   async function load() {
     try {
-      const { data } = await api.get("/invoices");
-      setItems(Array.isArray(data) ? data.filter((i: Invoice) => i.status !== "draft") : []);
+      const { data } = await api.get("/invoices/");
+      const all: Invoice[] = Array.isArray(data) ? data : [];
+      setItems(all.filter((i) => i.status !== "draft" && (!i.customer || i.customer.id === user?.id)));
     } catch (err) {
       toast.error(errorMessage(err, "Could not load your invoices"), { id: "portal-inv" });
     } finally {
